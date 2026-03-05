@@ -1,0 +1,33 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# RKNN Model Export Container
+# Runs on Windows via Docker Desktop — no WSL or Linux install needed.
+#
+# Build & run (from project root, PowerShell):
+#   docker build -f deploy/Dockerfile.export -t rknn-export .
+#   docker run --rm -v "D:\development\vd2\python\models:/work/models" rknn-export
+#
+# The converted .rknn file is saved to python/models/ on your Windows machine.
+# ─────────────────────────────────────────────────────────────────────────────
+
+FROM python:3.10-slim
+
+# OpenCV requires libGL
+RUN apt-get update -q && \
+    apt-get install -y --no-install-recommends libgl1 libglib2.0-0 && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /work
+
+# Install rknn-toolkit2 with all its dependencies, then ultralytics.
+# Finally pin onnx to 1.16.2 — rknn-toolkit2 uses onnx.mapping removed in 1.17+
+RUN pip install --no-cache-dir \
+    https://raw.githubusercontent.com/airockchip/rknn-toolkit2/master/rknn-toolkit2/packages/x86_64/rknn_toolkit2-2.3.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl && \
+    pip install --no-cache-dir ultralytics && \
+    pip install --no-cache-dir onnx==1.16.2
+
+# Copy the export script
+COPY deploy/export_rknn.py /work/deploy/export_rknn.py
+
+# models/ is mounted at runtime via -v so the .pt and output .rknn
+# live on your Windows filesystem, not inside the container.
+CMD ["python", "deploy/export_rknn.py", "--chip", "rk3576"]

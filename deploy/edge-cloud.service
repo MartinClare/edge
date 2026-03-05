@@ -1,0 +1,27 @@
+[Unit]
+Description=Edge AI – Cloud Vision API (OpenRouter / Gemini proxy)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=edge
+Group=edge
+WorkingDirectory=/opt/edge-service/cloud
+
+# .env is loaded by dotenv inside the app; also pass key vars as Environment
+# so the service can be managed without touching .env.
+Environment=NODE_ENV=production
+Environment=PORT=3001
+
+ExecStart=/usr/bin/node dist/index.js
+
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

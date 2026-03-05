@@ -1,0 +1,18 @@
+[Unit]
+Description=Edge AI – React UI (static file server)
+After=network-online.target edge-python.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=edge
+Group=edge
+
+# Requires: npm install -g serve
+ExecStart=/usr/bin/serve -s /opt/edge-service/ppe-ui/build -l 3000
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,30 @@
+# =============================================================================
+# Requirements for Rockchip RK3588 / RK3576 / RK3568 (ARM64 Linux)
+# =============================================================================
+#
+# INSTALL ORDER — run these commands on the device:
+#
+#   1. Install PyTorch CPU (ARM64 wheels from PyTorch index):
+#      pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+#
+#   2. Install RKNN Toolkit Lite 2 (inference runtime for Rockchip NPU):
+#      Download the correct .whl for your Python version from:
+#      https://github.com/airockchip/rknn-toolkit2/tree/master/rknn-toolkit-lite2/packages
+#      Example (Python 3.10, RK3588):
+#      pip install rknn_toolkit_lite2-2.3.0-cp310-cp310-linux_aarch64.whl
+#
+#   3. Install the rest:
+#      pip install -r requirements-rk3588.txt
+#
+# =============================================================================
+
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+# opencv-python-headless has prebuilt ARM64 wheels on PyPI
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+pydantic>=2.0.0
+python-multipart>=0.0.6
+requests>=2.31.0
+# ultralytics handles RKNN inference automatically when a .rknn model is loaded
+ultralytics>=8.0.0

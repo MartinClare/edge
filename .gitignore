@@ -1,0 +1,54 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+*.egg
+
+# YOLO / model weights (large binaries)
+*.pt
+*.onnx
+python/models/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+
+# TypeScript / build
+cloud/dist/
+ppe-ui/build/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+
+# IDE and editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs and cache
+logs/
+*.log
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local config overrides (optional; remove if you want to track)
+# app.config.json
