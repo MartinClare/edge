@@ -45,13 +45,18 @@
   },
   "centralServer": {
     "enabled": true,
-    "url": "http://192.168.1.170:3002/api/webhook/edge-report",
-    "apiKey": "axonedge852852852"
+    "url": "https://cctvcmp.vercel.app/api/webhook/edge-report",
+    "apiKey": "axonedge852852"
   },
   "network": {
     "camera_lan": "eth2",
     "internet": "eth1",
     "vpn": "eth1",
     "cmp": "eth1"
+  },
+  "vpn": {
+    "enabled": true,
+    "interface": "mullvad",
+    "provider": "mullvad"
   }
 }
