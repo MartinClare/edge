@@ -1072,7 +1072,8 @@ async def update_app_config(request: Request):
         if "centralServer" in body:
             config["centralServer"] = body["centralServer"]
         if "vpn" in body:
-            config["vpn"] = body["vpn"]
+            vpn_in = body.get("vpn") or {}
+            config["vpn"] = {"enabled": bool(vpn_in.get("enabled", True))}
         if "tailscale" in body:
             config["tailscale"] = body["tailscale"]
         if "network" in body:
