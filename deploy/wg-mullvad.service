@@ -1,0 +1,16 @@
+[Unit]
+Description=Mullvad WireGuard VPN (edge-cloud only policy route)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=-/usr/bin/wg-quick down mullvad
+ExecStart=/usr/bin/wg-quick up mullvad
+ExecStartPost=/usr/local/bin/wg-mullvad-policy.sh up
+ExecStop=/usr/bin/wg-quick down mullvad
+ExecStopPost=/usr/local/bin/wg-mullvad-policy.sh down
+
+[Install]
+WantedBy=multi-user.target

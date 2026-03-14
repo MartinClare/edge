@@ -1,5 +1,6 @@
 """FastAPI application with YOLOv8 detection endpoints."""
 
+import subprocess
 import tempfile
 import time
 import base64
@@ -235,6 +236,8 @@ async def startup_event():
         global _deepvision_task
         if _deepvision_task is None or _deepvision_task.done():
             _deepvision_task = asyncio.create_task(_deepvision_background_loop())
+        # Ensure edge-cloud is running regardless of VPN state
+        _ensure_edge_cloud_running()
     except Exception as exc:
         logger.error(f"Failed to start alarm observer: {exc}", exc_info=True)
 
@@ -897,6 +900,95 @@ def _app_config_paths():
     )
 
 
+def _apply_vpn(enabled: bool) -> None:
+    """Apply VPN on/off in real time (systemctl start/stop wg-mullvad)."""
+    try:
+        if enabled:
+            subprocess.run(
+                ["sudo", "systemctl", "start", "wg-mullvad"],
+                timeout=30,
+                capture_output=True,
+                check=False,
+            )
+        else:
+            subprocess.run(
+                ["sudo", "systemctl", "stop", "wg-mullvad"],
+                timeout=15,
+                capture_output=True,
+                check=False,
+            )
+        # Ensure edge-cloud is always running regardless of VPN state
+        _ensure_edge_cloud_running()
+    except Exception as e:
+        logger.warning("VPN apply failed: %s", e)
+
+
+def _ensure_edge_cloud_running() -> None:
+    """Ensure edge-cloud.service is running (start if stopped)."""
+    try:
+        subprocess.run(
+            ["sudo", "systemctl", "start", "edge-cloud"],
+            timeout=15,
+            capture_output=True,
+            check=False,
+        )
+    except Exception as e:
+        logger.warning("edge-cloud start failed: %s", e)
+
+
+def _apply_tailscale(enabled: bool) -> None:
+    """Apply Tailscale on/off (runs sudo tailscale up/down)."""
+    try:
+        if enabled:
+            subprocess.run(
+                ["sudo", "tailscale", "up", "--accept-dns=false", "--netfilter-mode=off", "--ssh"],
+                timeout=30,
+                capture_output=True,
+                check=False,
+            )
+        else:
+            subprocess.run(["sudo", "tailscale", "down"], timeout=15, capture_output=True, check=False)
+    except Exception as e:
+        logger.warning("Tailscale apply failed: %s", e)
+
+
+# Services we report status for (systemd unit names)
+_CONFIG_SERVICES = [
+    ("edge-python", "Python backend"),
+    ("edge-ui", "PPE UI"),
+    ("edge-cloud", "Cloud Vision API"),
+    ("wg-mullvad", "VPN (Mullvad)"),
+    ("tailscaled", "Tailscale"),
+]
+
+
+def _get_service_status(unit: str) -> str:
+    """Return systemd unit state: active, inactive, failed, or unknown."""
+    try:
+        r = subprocess.run(
+            ["systemctl", "is-active", unit],
+            timeout=5,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return (r.stdout or "").strip() or "inactive"
+    except Exception:
+        return "unknown"
+
+
+@app.get("/api/services/status")
+async def get_services_status():
+    """Return status of all config-related systemd services for the PPE-UI."""
+    result = {}
+    for unit, label in _CONFIG_SERVICES:
+        result[unit] = {
+            "label": label,
+            "status": _get_service_status(unit),
+        }
+    return result
+
+
 @app.get("/api/config")
 async def get_app_config():
     """Return the authoritative root app.config.json."""
@@ -921,10 +1013,11 @@ async def update_app_config(request: Request):
         {
           "rtsp": { "cameras": [...], "fpsLimit", "geminiInterval", "autoStart" },
           "centralServer": { "enabled", "url", "apiKey" },
-          "vpn": { "enabled", "interface", "provider" },
+          "vpn": { "enabled" },
+          "tailscale": { "enabled": true|false },
           "network": { ... }
         }
-    Merges into existing config and writes to all config copies.
+    Merges into existing config and writes to root + mirrors. Applies Tailscale on/off when tailscale is present.
     """
     try:
         body = await request.json()
@@ -952,6 +1045,8 @@ async def update_app_config(request: Request):
             config["centralServer"] = body["centralServer"]
         if "vpn" in body:
             config["vpn"] = body["vpn"]
+        if "tailscale" in body:
+            config["tailscale"] = body["tailscale"]
         if "network" in body:
             config["network"] = body["network"]
         if "ui" in body:
@@ -962,10 +1057,10 @@ async def update_app_config(request: Request):
             else:
                 config["ui"] = body["ui"]
 
-        if rtsp is None and "centralServer" not in body and "vpn" not in body and "network" not in body and "ui" not in body:
+        if rtsp is None and "centralServer" not in body and "vpn" not in body and "tailscale" not in body and "network" not in body and "ui" not in body:
             raise HTTPException(
                 status_code=400,
-                detail="Request must include at least one of: rtsp, centralServer, vpn, network, ui",
+                detail="Request must include at least one of: rtsp, centralServer, vpn, tailscale, network, ui",
             )
 
         out = json.dumps(config, indent=2, ensure_ascii=False)
@@ -974,6 +1069,14 @@ async def update_app_config(request: Request):
             with open(p, "w", encoding="utf-8") as f:
                 f.write(out)
         logger.info("app.config.json updated from ppe-ui Settings")
+
+        # Apply VPN on/off in real time if present
+        if "vpn" in body:
+            _apply_vpn(config.get("vpn", {}).get("enabled", True))
+        # Apply Tailscale on/off if present
+        if "tailscale" in body:
+            _apply_tailscale(config.get("tailscale", {}).get("enabled", True))
+
         return {"success": True, "message": "Config saved to app.config.json"}
     except HTTPException:
         raise

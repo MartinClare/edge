@@ -19,8 +19,6 @@ interface CentralServerConfig {
 
 interface VpnConfig {
   enabled: boolean;
-  interface: string;
-  provider: string;
 }
 
 interface AppConfig {
@@ -36,6 +34,7 @@ interface AppConfig {
   };
   centralServer?: CentralServerConfig;
   vpn?: VpnConfig;
+  tailscale?: { enabled: boolean };
 }
 
 interface MultiCameraGridProps {
@@ -234,6 +233,7 @@ const MultiCameraGrid: React.FC<MultiCameraGridProps> = ({
     deepVisionEnabled: boolean;
     centralServer: CentralServerConfig;
     vpn: VpnConfig;
+    tailscale: { enabled: boolean };
   }) => {
     setCameraUrls(settings.cameraUrls);
     setCameraNames(settings.cameraNames);
@@ -250,6 +250,7 @@ const MultiCameraGrid: React.FC<MultiCameraGridProps> = ({
       },
       centralServer: settings.centralServer,
       vpn: settings.vpn,
+      tailscale: settings.tailscale,
     } : prev);
     console.log('[MultiCamera] Settings saved:', settings);
     // Force remount of streams by updating config
@@ -868,8 +869,7 @@ const MultiCameraGrid: React.FC<MultiCameraGridProps> = ({
           configCmpUrl={config.centralServer?.url ?? ''}
           configCmpApiKey={config.centralServer?.apiKey ?? ''}
           configVpnEnabled={config.vpn?.enabled ?? true}
-          configVpnInterface={config.vpn?.interface ?? 'mullvad'}
-          configVpnProvider={config.vpn?.provider ?? 'mullvad'}
+          configTailscaleEnabled={config.tailscale?.enabled ?? true}
           onClose={() => setShowSettings(false)}
           onSave={handleSettingsSave}
         />

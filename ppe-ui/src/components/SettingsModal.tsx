@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { YOLO_API_URL } from '../config/api';
 
 interface CameraConfig {
   id: string;
@@ -20,10 +21,9 @@ interface AppSettings {
     url: string;
     apiKey: string;
   };
-  vpn: {
+  vpn: { enabled: boolean };
+  tailscale: {
     enabled: boolean;
-    interface: string;
-    provider: string;
   };
 }
 
@@ -37,8 +37,7 @@ interface SettingsModalProps {
   configCmpUrl: string;
   configCmpApiKey: string;
   configVpnEnabled: boolean;
-  configVpnInterface: string;
-  configVpnProvider: string;
+  configTailscaleEnabled: boolean;
   onClose: () => void;
   onSave: (settings: AppSettings) => void;
 }
@@ -53,8 +52,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   configCmpUrl,
   configCmpApiKey,
   configVpnEnabled,
-  configVpnInterface,
-  configVpnProvider,
+  configTailscaleEnabled,
   onClose,
   onSave
 }) => {
@@ -69,13 +67,31 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [cmpUrl, setCmpUrl] = useState(configCmpUrl);
   const [cmpApiKey, setCmpApiKey] = useState(configCmpApiKey);
   const [vpnEnabled, setVpnEnabled] = useState(configVpnEnabled);
-  const [vpnInterface, setVpnInterface] = useState(configVpnInterface);
-  const [vpnProvider, setVpnProvider] = useState(configVpnProvider);
+  const [tailscaleEnabled, setTailscaleEnabled] = useState(configTailscaleEnabled);
   const [hasChanges, setHasChanges] = useState(false);
+  const [serviceStatus, setServiceStatus] = useState<Record<string, { label: string; status: string }> | null>(null);
+  const [serviceStatusLoading, setServiceStatusLoading] = useState(false);
+
+  const fetchServiceStatus = useCallback(async () => {
+    setServiceStatusLoading(true);
+    try {
+      const res = await fetch(`${YOLO_API_URL}/api/services/status`);
+      if (res.ok) {
+        const data = await res.json();
+        setServiceStatus(data);
+      } else {
+        setServiceStatus(null);
+      }
+    } catch {
+      setServiceStatus(null);
+    } finally {
+      setServiceStatusLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    // app.config.json is the source of truth; no localStorage overrides.
-  }, []);
+    fetchServiceStatus();
+  }, [fetchServiceStatus]);
 
   const handleCameraUrlChange = (cameraId: string, url: string) => {
     setCameraUrls(prev => ({ ...prev, [cameraId]: url }));
@@ -124,10 +140,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         url: cmpUrl.trim(),
         apiKey: cmpApiKey.trim(),
       },
-      vpn: {
-        enabled: vpnEnabled,
-        interface: vpnInterface.trim() || 'mullvad',
-        provider: vpnProvider.trim() || 'mullvad',
+      vpn: { enabled: vpnEnabled },
+      tailscale: {
+        enabled: tailscaleEnabled,
       },
     };
 
@@ -151,6 +166,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       },
       centralServer: settings.centralServer,
       vpn: settings.vpn,
+      tailscale: settings.tailscale,
     };
     fetch(`${baseUrl}/api/config`, {
       method: 'PUT',
@@ -159,6 +175,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     }).then((res) => {
       if (res.ok) {
         console.log('[Settings] Config synced to app.config.json');
+        fetchServiceStatus();
       } else {
         console.warn('[Settings] Failed to sync config to app.config.json:', res.status);
       }
@@ -183,8 +200,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       setCmpUrl(configCmpUrl);
       setCmpApiKey(configCmpApiKey);
       setVpnEnabled(configVpnEnabled);
-      setVpnInterface(configVpnInterface);
-      setVpnProvider(configVpnProvider);
+      setTailscaleEnabled(configTailscaleEnabled);
       setHasChanges(true);
     }
   };
@@ -278,6 +294,59 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           overflowY: 'auto',
           padding: '1.5rem'
         }}>
+          {/* Service status */}
+          <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'rgba(0,0,0,0.25)', borderRadius: '8px', border: '1px solid rgba(0, 217, 255, 0.2)' }}>
+            <h3 style={{ color: '#00d9ff', fontSize: '1.1rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              📡 Service status
+              {!serviceStatusLoading && serviceStatus && (
+                <button
+                  type="button"
+                  onClick={fetchServiceStatus}
+                  style={{
+                    marginLeft: 'auto',
+                    fontSize: '0.75rem',
+                    padding: '0.2rem 0.5rem',
+                    background: 'rgba(0, 217, 255, 0.2)',
+                    border: '1px solid rgba(0, 217, 255, 0.4)',
+                    color: '#00d9ff',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Refresh
+                </button>
+              )}
+            </h3>
+            {serviceStatusLoading && (
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>Loading…</div>
+            )}
+            {!serviceStatusLoading && serviceStatus && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {Object.entries(serviceStatus).map(([unit, { label, status }]) => {
+                  const isActive = status === 'active';
+                  const isFailed = status === 'failed';
+                  return (
+                    <div key={unit} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                      <span style={{ color: 'rgba(255,255,255,0.9)' }}>{label}</span>
+                      <span style={{
+                        padding: '0.2rem 0.5rem',
+                        borderRadius: '4px',
+                        fontWeight: 500,
+                        background: isActive ? 'rgba(76, 175, 80, 0.25)' : isFailed ? 'rgba(244, 67, 54, 0.25)' : 'rgba(255, 152, 0, 0.2)',
+                        color: isActive ? '#81c784' : isFailed ? '#e57373' : '#ffb74d'
+                      }}>
+                        {status === 'active' ? 'Running' : status === 'failed' ? 'Failed' : status === 'inactive' ? 'Stopped' : status}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {!serviceStatusLoading && !serviceStatus && (
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem' }}>Unable to load service status</div>
+            )}
+          </div>
+
           {/* Global Settings */}
           <div style={{ marginBottom: '2rem' }}>
             <h3 style={{ color: '#00d9ff', fontSize: '1.1rem', marginBottom: '1rem' }}>
@@ -465,7 +534,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 />
               </div>
 
-              {/* VPN Settings */}
+              {/* VPN (Mullvad) */}
               <div style={{ paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                 <label style={{
                   display: 'flex',
@@ -484,56 +553,31 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     }}
                     style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                   />
-                  Enable VPN
+                  Enable VPN (Mullvad)
                 </label>
               </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'rgba(255,255,255,0.9)', fontSize: '0.9rem' }}>
-                  VPN Provider
+              {/* Tailscale */}
+              <div style={{ paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  cursor: 'pointer',
+                  color: 'rgba(255,255,255,0.9)',
+                  fontSize: '0.9rem'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={tailscaleEnabled}
+                    onChange={(e) => {
+                      setTailscaleEnabled(e.target.checked);
+                      setHasChanges(true);
+                    }}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                  Enable Tailscale (remote access)
                 </label>
-                <input
-                  type="text"
-                  value={vpnProvider}
-                  onChange={(e) => {
-                    setVpnProvider(e.target.value);
-                    setHasChanges(true);
-                  }}
-                  placeholder="mullvad"
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    borderRadius: '4px',
-                    border: '1px solid rgba(0, 217, 255, 0.3)',
-                    background: 'rgba(0, 0, 0, 0.3)',
-                    color: '#fff',
-                    fontSize: '0.9rem'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'rgba(255,255,255,0.9)', fontSize: '0.9rem' }}>
-                  VPN Interface Name
-                </label>
-                <input
-                  type="text"
-                  value={vpnInterface}
-                  onChange={(e) => {
-                    setVpnInterface(e.target.value);
-                    setHasChanges(true);
-                  }}
-                  placeholder="mullvad"
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    borderRadius: '4px',
-                    border: '1px solid rgba(0, 217, 255, 0.3)',
-                    background: 'rgba(0, 0, 0, 0.3)',
-                    color: '#fff',
-                    fontSize: '0.9rem'
-                  }}
-                />
               </div>
             </div>
           </div>

@@ -147,6 +147,14 @@ cp "$INSTALL_DIR/deploy/edge-ui.service" "$SERVICE_DIR/edge-ui.service"
 
 SERVICES="edge-python edge-ui"
 
+if [ -f "$INSTALL_DIR/deploy/wg-mullvad.service" ] && [ -f "$INSTALL_DIR/deploy/wg-mullvad-policy.sh" ]; then
+    cp "$INSTALL_DIR/deploy/wg-mullvad.service" "$SERVICE_DIR/wg-mullvad.service"
+    cp "$INSTALL_DIR/deploy/wg-mullvad-policy.sh" "/usr/local/bin/wg-mullvad-policy.sh"
+    chmod +x "/usr/local/bin/wg-mullvad-policy.sh"
+    SERVICES="$SERVICES wg-mullvad"
+    echo "      ✓ Mullvad policy-routing service installed."
+fi
+
 if [ -d "$INSTALL_DIR/cloud/dist" ]; then
     cp "$INSTALL_DIR/deploy/edge-cloud.service" "$SERVICE_DIR/edge-cloud.service"
     SERVICES="$SERVICES edge-cloud"

@@ -85,10 +85,11 @@ Adjust paths and `User`/`Group` in the service files to match your install.
 - **Dual-LAN deployment model**:
   - `eth2`: camera LAN (example static `192.168.100.254/24`, no gateway)
   - `eth1`: internet/4G-5G uplink (default route, DHCP)
-  - Camera subnet route is pinned to `eth2` while internet/cloud traffic uses uplink/VPN.
-- **VPN + cloud dependency**:
+  - Camera subnet route is pinned to `eth2` while internet/cloud traffic uses uplink.
+- **VPN and cloud**:
   - `wg-mullvad` is used for OpenRouter region access where required.
-  - `edge-cloud.service` depends on `wg-mullvad.service` so cloud analysis starts with VPN path ready.
+  - VPN traffic is policy-routed for the `edge` service user only (cloud/Gemini path), so Tailscale and camera access are unaffected by VPN toggles.
+  - `edge-cloud.service` runs independently of VPN; it is kept running even when VPN is off.
 - **Boot persistence**:
   - `wg-mullvad`, `edge-python`, `edge-cloud`, `edge-ui`, and `tailscaled` are expected to be enabled at boot.
   - System should recover analysis + CMP forwarding automatically after reboot.
@@ -119,6 +120,8 @@ Web access over Tailscale:
 - Backend API: `http://<tailscale-ip>:8000`
 
 This works across reboots and 5G IP changes as long as both devices are online and logged into Tailscale.
+
+**Tailscale in app.config.json:** Set `tailscale.enabled` to `true` or `false` in root `app.config.json`. You can also toggle it in PPE-UI **Settings** (under VPN): "Enable Tailscale (remote access)". Saving applies the change immediately (runs `tailscale up` or `tailscale down` on the device).
 
 ## License
 
