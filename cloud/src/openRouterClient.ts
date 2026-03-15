@@ -7,8 +7,9 @@
  * Get your API key from: https://openrouter.ai/keys
  * 
  * MODEL SELECTION:
- * - Currently using "google/gemini-3-pro-preview" (latest Gemini 3 Pro)
- * - Alternative: "google/gemini-2.0-flash-001" (Gemini 2.0 Flash)
+ * - Currently using "google/gemini-3.1-pro-preview" (Gemini 3.1 Pro – highest accuracy)
+ * - Alternative: "google/gemini-3-flash-preview" (Gemini 3 Flash – fast, near-Pro quality)
+ * - Alternative: "google/gemini-2.5-flash" (Gemini 2.5 Flash – stable)
  * - Check https://openrouter.ai/models for available models
  */
 
@@ -24,13 +25,13 @@ export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions
 
 /**
  * Available models on OpenRouter:
- * - google/gemini-3-pro-preview: Gemini 3 Pro Preview (latest, most capable)
- * - google/gemini-2.0-flash-001: Gemini 2.0 Flash (stable, fast)
- * - google/gemini-1.5-flash: Gemini 1.5 Flash (very stable)
- * - google/gemini-1.5-pro: Gemini 1.5 Pro (high quality)
+ * - google/gemini-3-flash-preview: Gemini 3 Flash Preview (fast, near-Pro quality, best for real-time)
+ * - google/gemini-3.1-pro-preview: Gemini 3.1 Pro Preview (highest accuracy)
+ * - google/gemini-2.5-flash: Gemini 2.5 Flash (stable, reasoning capable)
+ * - google/gemini-2.5-pro: Gemini 2.5 Pro (high quality, stable)
  * - anthropic/claude-3.5-sonnet: Claude 3.5 (alternative)
  */
-export const MODEL_NAME = 'google/gemini-3-pro-preview';
+export const MODEL_NAME = 'google/gemini-3.1-pro-preview';
 
 /**
  * Supported languages for analysis output

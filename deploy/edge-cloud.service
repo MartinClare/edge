@@ -13,6 +13,8 @@ WorkingDirectory=/opt/edge-service/cloud
 # so the service can be managed without touching .env.
 Environment=NODE_ENV=production
 Environment=PORT=3001
+# Avoid Node Happy Eyeballs timeout behavior seen on this device.
+Environment=NODE_OPTIONS=--no-network-family-autoselection
 
 ExecStart=/usr/bin/node dist/index.js
 

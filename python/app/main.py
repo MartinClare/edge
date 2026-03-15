@@ -36,17 +36,11 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI app
 app = FastAPI(title=API_TITLE, version=API_VERSION)
 
-# Configure CORS origins from environment variable or use defaults
-ALLOWED_ORIGINS = os.getenv(
-    "ALLOWED_ORIGINS",
-    "http://localhost:3000,http://localhost:5173,http://localhost:3001"
-).split(",")
-
-# Add CORS middleware to allow frontend requests
+# Add CORS middleware to allow frontend requests from any LAN host.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
@@ -113,6 +107,10 @@ def _capture_jpeg_from_rtsp(rtsp_url: str) -> Optional[bytes]:
 
 
 def _analyze_with_cloud(frame_jpeg: bytes) -> Optional[dict]:
+    # Gemini/OpenRouter traffic must use active Mullvad VPN path.
+    if not _ensure_vpn_ready_for_gemini():
+        logger.warning("Skipping Gemini call: VPN is not ready")
+        return None
     try:
         resp = requests.post(
             "http://127.0.0.1:3001/api/analyze-image",
@@ -131,6 +129,54 @@ def _analyze_with_cloud(frame_jpeg: bytes) -> Optional[dict]:
     except Exception as exc:
         logger.warning(f"Deep Vision cloud call error: {exc}")
         return None
+
+
+def _ensure_vpn_ready_for_gemini() -> bool:
+    """Ensure wg-mullvad is active before sending Gemini/OpenRouter requests."""
+    try:
+        state = subprocess.run(
+            ["systemctl", "is-active", "wg-mullvad"],
+            timeout=5,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if (state.stdout or "").strip() == "active":
+            # Refresh split routes (OpenRouter-only via mullvad).
+            subprocess.run(
+                ["sudo", "/usr/local/bin/wg-mullvad-policy.sh", "up"],
+                timeout=10,
+                capture_output=True,
+                check=False,
+            )
+            return True
+
+        # Auto-start VPN when Gemini path is used.
+        subprocess.run(
+            ["sudo", "systemctl", "start", "wg-mullvad"],
+            timeout=20,
+            capture_output=True,
+            check=False,
+        )
+        verify = subprocess.run(
+            ["systemctl", "is-active", "wg-mullvad"],
+            timeout=5,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        is_active = (verify.stdout or "").strip() == "active"
+        if is_active:
+            subprocess.run(
+                ["sudo", "/usr/local/bin/wg-mullvad-policy.sh", "up"],
+                timeout=10,
+                capture_output=True,
+                check=False,
+            )
+        return is_active
+    except Exception as exc:
+        logger.warning("Failed to ensure VPN before Gemini: %s", exc)
+        return False
 
 
 def _build_alarm_payload(camera_id: str, camera_name: str, result: dict) -> dict:
@@ -1033,6 +1079,22 @@ async def get_app_config():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.options("/api/config")
+async def options_app_config():
+    """Handle CORS preflight for config updates."""
+    response = JSONResponse(
+        content={},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Expose-Headers": "*",
+            "Access-Control-Max-Age": "3600",
+        }
+    )
+    return response
+
+
 @app.put("/api/config")
 async def update_app_config(request: Request):
     """
@@ -1093,11 +1155,23 @@ async def update_app_config(request: Request):
             )
 
         out = json.dumps(config, indent=2, ensure_ascii=False)
-        for p in _app_config_paths():
-            p.parent.mkdir(parents=True, exist_ok=True)
-            with open(p, "w", encoding="utf-8") as f:
-                f.write(out)
-        logger.info("app.config.json updated from ppe-ui Settings")
+        path_root, *mirror_paths = _app_config_paths()
+
+        # Always write root app.config.json first (authoritative source of truth).
+        path_root.parent.mkdir(parents=True, exist_ok=True)
+        with open(path_root, "w", encoding="utf-8") as f:
+            f.write(out)
+
+        # Mirrors are best-effort and should not block root truth updates.
+        for p in mirror_paths:
+            try:
+                p.parent.mkdir(parents=True, exist_ok=True)
+                with open(p, "w", encoding="utf-8") as f:
+                    f.write(out)
+            except Exception as mirror_exc:
+                logger.warning("Mirror config sync failed for %s: %s", p, mirror_exc)
+
+        logger.info("Root app.config.json updated from ppe-ui Settings")
 
         # Apply VPN on/off in real time if present
         if "vpn" in body:

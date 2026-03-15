@@ -14,27 +14,35 @@
     "cameras": [
       {
         "id": "camera1",
-        "name": "site_b_07",
-        "url": "rtsp://fnnas.cccl4s.com:8554/site_b_07",
-        "enabled": true
+        "name": "site_b_08",
+        "url": "rtsp://fnnas.cccl4s.com:8554/site_b_08",
+        "enabled": true,
+        "tailscaleUrl": "",
+        "useTailscale": false
       },
       {
         "id": "camera2",
-        "name": "site_b_08",
-        "url": "rtsp://fnnas.cccl4s.com:8554/site_b_05",
-        "enabled": true
+        "name": "site_b_09",
+        "url": "rtsp://fnnas.cccl4s.com:8554/site_b_09",
+        "enabled": true,
+        "tailscaleUrl": "",
+        "useTailscale": false
       },
       {
         "id": "camera3",
-        "name": "Exit 3",
-        "url": "rtsp://fnnas.cccl4s.com:8554/site_b_06",
-        "enabled": true
+        "name": "site_b_11",
+        "url": "rtsp://fnnas.cccl4s.com:8554/site_b_11",
+        "enabled": true,
+        "tailscaleUrl": "",
+        "useTailscale": false
       },
       {
         "id": "camera4",
-        "name": "Camera 4",
+        "name": "site_a_04",
         "url": "rtsp://fnnas.cccl4s.com:8554/site_a_04",
-        "enabled": true
+        "enabled": true,
+        "tailscaleUrl": "",
+        "useTailscale": false
       }
     ],
     "fpsLimit": 15,
@@ -60,6 +68,7 @@
     "enabled": true
   },
   "tailscale": {
-    "enabled": true
+    "enabled": true,
+    "mode": "outbound"
   }
 }

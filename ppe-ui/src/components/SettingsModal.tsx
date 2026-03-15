@@ -155,7 +155,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     setHasChanges(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const settings: AppSettings = {
       cameraUrls,
       cameraTailscaleUrls,
@@ -178,8 +178,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       },
     };
 
-    // Sync to app.config.json via Python backend
-    const baseUrl = process.env.REACT_APP_YOLO_API_URL || 'http://localhost:8000';
+    // Sync to root app.config.json via Python backend first.
+    const baseUrl = YOLO_API_URL;
     const rtspPayload = {
       rtsp: {
         cameras: cameras.map((c) => ({
@@ -202,23 +202,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       vpn: settings.vpn,
       tailscale: settings.tailscale,
     };
-    fetch(`${baseUrl}/api/config`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(rtspPayload),
-    }).then((res) => {
-      if (res.ok) {
-        console.log('[Settings] Config synced to app.config.json');
-        fetchServiceStatus();
-      } else {
+    try {
+      const res = await fetch(`${baseUrl}/api/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rtspPayload),
+      });
+      if (!res.ok) {
         console.warn('[Settings] Failed to sync config to app.config.json:', res.status);
+        alert(`Save failed (${res.status}). Configuration was not written to app.config.json.`);
+        return;
       }
-    }).catch((err) => {
-      console.warn('[Settings] Could not reach backend to sync app.config.json:', err);
-    });
+      console.log('[Settings] Config synced to app.config.json');
+      fetchServiceStatus();
 
-    onSave(settings);
-    onClose();
+      // Only update local UI and close after backend confirms persistence.
+      onSave(settings);
+      onClose();
+    } catch (err) {
+      console.warn('[Settings] Could not reach backend to sync app.config.json:', err);
+      alert('Save failed: backend unreachable. Configuration was not written.');
+    }
   };
 
   const handleReset = () => {
