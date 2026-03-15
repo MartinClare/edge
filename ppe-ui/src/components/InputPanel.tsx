@@ -116,12 +116,6 @@ const InputPanel: React.FC<InputPanelProps> = ({
             >
               🤖 Deep Vision
             </button>
-            <button
-              className={currentMode === 'alerts' ? 'active' : ''}
-              onClick={() => onModeChange('alerts')}
-            >
-              🚨 Alerts
-            </button>
           </div>
         </>
       )}
