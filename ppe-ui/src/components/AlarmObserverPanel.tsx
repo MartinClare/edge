@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { YOLO_API_URL } from '../config/api';
 
 interface Alarm {
   alarm_id: string;
@@ -33,8 +34,6 @@ interface AlarmLog {
   actions: string[];
   details: any;
 }
-
-const YOLO_API_URL = process.env.REACT_APP_YOLO_API_URL || 'http://localhost:8000';
 
 const AlarmObserverPanel: React.FC = () => {
   const [status, setStatus] = useState<AlarmStatus | null>(null);

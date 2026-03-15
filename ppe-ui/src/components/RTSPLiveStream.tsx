@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { analyzeImageGemini, analyzeImageAlerts } from '../services/geminiApi';
-import type { AnalysisMode, GeminiAnalysisResult, AlertAnalysisResult } from '../types/detection.types';
+import type { AnalysisMode, GeminiAnalysisResult, AlertAnalysisResult, GeminiDetection } from '../types/detection.types';
 import { YOLO_API_URL } from '../config/api';
 
 interface Detection {
@@ -82,6 +82,7 @@ const RTSPLiveStream: React.FC<RTSPLiveStreamProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const fpsCounterRef = useRef({ count: 0, lastTime: Date.now() });
+  const geminiDetectionsRef = useRef<GeminiDetection[]>([]);
   const geminiAbortControllerRef = useRef<AbortController | null>(null);
   const currentAnalysisModeRef = useRef<AnalysisMode>(analysisMode);
   const allowGeminiRequestsRef = useRef<boolean>(analysisMode !== 'yolo');
@@ -202,7 +203,8 @@ const RTSPLiveStream: React.FC<RTSPLiveStreamProps> = ({
     if (onGeminiResult) onGeminiResult(null);
     if (onAlertResult) onAlertResult(null);
 
-    const ws = new WebSocket('ws://localhost:8000/ws/rtsp/stream');
+    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${wsProto}//${window.location.host}/ws/rtsp/stream`);
     
     ws.onopen = () => {
       console.log(`[RTSP-${cameraId}] WebSocket connected (${mountIdRef.current})`);
@@ -317,6 +319,7 @@ const RTSPLiveStream: React.FC<RTSPLiveStreamProps> = ({
                     const completeTime = new Date().toISOString();
                     console.log(`[RTSP-${cameraId}] ✅ [${completeTime}] Gemini analysis complete (took ${duration}s)`);
                     console.log(`[RTSP-${cameraId}] Result:`, result);
+                    geminiDetectionsRef.current = result.detections || [];
                     setLatestGeminiResult(result);
                     if (onGeminiResult) onGeminiResult(result);
                     setGeminiAnalyzing(false);
@@ -337,6 +340,7 @@ const RTSPLiveStream: React.FC<RTSPLiveStreamProps> = ({
                     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
                     const completeTime = new Date().toISOString();
                     console.log(`[RTSP] ✅ [${completeTime}] Alert analysis complete (took ${duration}s)`);
+                    geminiDetectionsRef.current = result.detections || [];
                     setLatestAlertResult(result);
                     onAlertResult(result);
                     setGeminiAnalyzing(false);
@@ -416,7 +420,8 @@ const RTSPLiveStream: React.FC<RTSPLiveStreamProps> = ({
     geminiAnalyzingRef.current = false;
     setLastGeminiTime(0);
     lastGeminiTimeRef.current = 0;
-    latestFrameIndexRef.current = 0; // Reset frame index tracker
+    latestFrameIndexRef.current = 0;
+    geminiDetectionsRef.current = [];
     setLatestGeminiResult(null);
     setLatestAlertResult(null);
     
@@ -488,7 +493,7 @@ const RTSPLiveStream: React.FC<RTSPLiveStreamProps> = ({
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0);
 
-      // Draw bounding boxes
+      // Draw YOLO bounding boxes (currently empty on RK3576 — stub)
       detections.forEach((det) => {
         if (det.confidence < 0.5) return;
 
@@ -509,6 +514,68 @@ const RTSPLiveStream: React.FC<RTSPLiveStreamProps> = ({
         ctx.fillStyle = '#000';
         ctx.fillText(label, x1 + 5, y1 - 7);
       });
+
+      // Draw Gemini bounding boxes (persisted from last analysis)
+      const geminiDets = geminiDetectionsRef.current;
+      if (geminiDets && geminiDets.length > 0) {
+        const W = canvas.width;
+        const H = canvas.height;
+
+        const COLORS: Record<string, { stroke: string; fill: string; text: string }> = {
+          // PPE status
+          person_ok:          { stroke: '#00e676', fill: 'rgba(0,230,118,0.12)',   text: '✓ PPE OK' },
+          no_hardhat:         { stroke: '#ff9800', fill: 'rgba(255,152,0,0.15)',   text: '⚠ No Hardhat' },
+          no_vest:            { stroke: '#ff9800', fill: 'rgba(255,152,0,0.15)',   text: '⚠ No Vest' },
+          no_hardhat_no_vest: { stroke: '#f44336', fill: 'rgba(244,67,54,0.18)',   text: '✗ No PPE' },
+          // Critical hazards
+          fire_smoke:         { stroke: '#ff1744', fill: 'rgba(255,23,68,0.20)',   text: '🔥 Fire/Smoke' },
+          smoking:            { stroke: '#ff6d00', fill: 'rgba(255,109,0,0.18)',   text: '🚬 Smoking' },
+          machine_proximity:  { stroke: '#d500f9', fill: 'rgba(213,0,249,0.18)',   text: '⚙ Machine Danger' },
+          working_at_height:  { stroke: '#ffea00', fill: 'rgba(255,234,0,0.15)',   text: '⬆ Height Risk' },
+          person_fallen:      { stroke: '#ff1744', fill: 'rgba(255,23,68,0.22)',   text: '🆘 Person Fallen' },
+          safety_hazard:      { stroke: '#ff6d00', fill: 'rgba(255,109,0,0.18)',   text: '⚠ Hazard' },
+        };
+
+        geminiDets.forEach((det) => {
+          const [yMin, xMin, yMax, xMax] = det.bbox;
+          const x = (xMin / 1000) * W;
+          const y = (yMin / 1000) * H;
+          const w = ((xMax - xMin) / 1000) * W;
+          const h = ((yMax - yMin) / 1000) * H;
+
+          const c = COLORS[det.label] || COLORS['person_ok'];
+
+          // Semi-transparent fill
+          ctx.fillStyle = c.fill;
+          ctx.fillRect(x, y, w, h);
+
+          // Border — dashed + thicker for critical hazards
+          const isHazardBox = ['fire_smoke','smoking','machine_proximity','person_fallen'].includes(det.label);
+          ctx.strokeStyle = c.stroke;
+          ctx.lineWidth = isHazardBox ? 3.5 : 2.5;
+          if (isHazardBox) {
+            ctx.setLineDash([8, 4]);
+          } else {
+            ctx.setLineDash([]);
+          }
+          ctx.strokeRect(x, y, w, h);
+          ctx.setLineDash([]);
+
+          // Label badge — append description for hazard detections
+          const isHazard = ['fire_smoke','smoking','machine_proximity','working_at_height','person_fallen','safety_hazard'].includes(det.label);
+          const labelText = isHazard && det.description
+            ? `${c.text}: ${det.description.substring(0, 40)}`
+            : c.text;
+          ctx.font = `bold ${isHazard ? 12 : 13}px Arial`;
+          const textW = ctx.measureText(labelText).width;
+          const badgeH = isHazard ? 18 : 20;
+          const badgeY = y > badgeH ? y - badgeH : y + h;
+          ctx.fillStyle = c.stroke;
+          ctx.fillRect(x, badgeY, textW + 10, badgeH);
+          ctx.fillStyle = '#000';
+          ctx.fillText(labelText, x + 5, badgeY + badgeH - 4);
+        });
+      }
 
       ctx.restore();
       isRenderingRef.current = false;

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { listVideos, type VideoFile } from '../services/videoFolderApi';
+import { YOLO_API_URL } from '../config/api';
 
 interface VideoUploadProps {
   onVideoSelect: (file: File | null, filePath?: string) => void;
@@ -68,7 +69,6 @@ const VideoUpload: React.FC<VideoUploadProps> = ({
     setSelectedFilePath(video.path);
     setVideoFile(null);
     // Create HTTP URL to serve video from Python backend
-    const YOLO_API_URL = process.env.REACT_APP_YOLO_API_URL || 'http://localhost:8000';
     const videoHttpUrl = `${YOLO_API_URL}/videos/${encodeURIComponent(video.filename)}`;
     setVideoUrl(videoHttpUrl);
     onVideoSelect(null, video.path);

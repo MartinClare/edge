@@ -83,6 +83,29 @@ export interface SafetyCategory {
   recommendations: string[];
 }
 
+/**
+ * Bounding box detection entry from Gemini.
+ * bbox is [y_min, x_min, y_max, x_max] normalized 0–1000.
+ *
+ * PPE labels:     person_ok | no_hardhat | no_vest | no_hardhat_no_vest
+ * Hazard labels:  fire_smoke | smoking | machine_proximity | working_at_height | person_fallen | safety_hazard
+ */
+export interface GeminiDetection {
+  label:
+    | 'person_ok'
+    | 'no_hardhat'
+    | 'no_vest'
+    | 'no_hardhat_no_vest'
+    | 'fire_smoke'
+    | 'smoking'
+    | 'machine_proximity'
+    | 'working_at_height'
+    | 'person_fallen'
+    | 'safety_hazard';
+  bbox: [number, number, number, number];
+  description?: string;
+}
+
 export interface GeminiAnalysisResult {
   overallDescription: string;
   overallRiskLevel: 'Low' | 'Medium' | 'High';
@@ -92,6 +115,7 @@ export interface GeminiAnalysisResult {
   peopleCount?: number;
   missingHardhats?: number;
   missingVests?: number;
+  detections?: GeminiDetection[];
 }
 
 export interface AlertItem {
@@ -107,6 +131,7 @@ export interface AlertAnalysisResult {
   peopleCount?: number;
   missingHardhats?: number;
   missingVests?: number;
+  detections?: GeminiDetection[];
 }
 
 // Input Source Types

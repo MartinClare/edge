@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type { VideoAnalysisResult, FrameDetection, GeminiFrameAnalysis } from '../types/detection.types';
 
-const GEMINI_API_URL = process.env.REACT_APP_GEMINI_API_URL || 'http://localhost:3001';
+import { GEMINI_API_URL } from '../config/api';
 
 export interface VideoFile {
   filename: string;

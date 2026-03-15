@@ -129,6 +129,35 @@ Image shows 3 workers:
 Result: peopleCount = 3, missingHardhats = 1 (Person 1), missingVests = 1 (Person 2)
 **NOTE: Person 2 and Person 3 both have WHITE hard hats - these are VALID hard hats and are NOT counted as missing!**
 
+**STEP 4: SCAN FOR CRITICAL HAZARDS**
+
+After checking PPE, scan the entire scene for these CRITICAL hazards. Each one found MUST appear as a detection entry with a bounding box:
+
+**A. FIRE / SMOKE / SMOKING**
+- Look for: open flames, fire, smoke plumes, burning materials, sparks
+- Look for: any person holding a cigarette or visibly smoking
+- Labels: "fire_smoke" for fire/smoke, "smoking" for a person smoking
+
+**B. MACHINE-PERSON PROXIMITY DANGER**
+- Look for: any heavy machinery (excavator, forklift, crane, bulldozer, truck, rotating equipment) that appears dangerously close to a person
+- "Dangerously close" = the machine could reach or strike the person without warning; no safe exclusion zone visible
+- Label: "machine_proximity" — draw the box around BOTH the machine and the endangered person together
+
+**C. WORKING AT HEIGHT — SAFETY VIOLATION**
+- Look for: workers on ladders, scaffolding, rooftops, elevated platforms, or any surface more than ~2 metres above ground
+- Flag ONLY if: no visible harness/safety line, guardrail missing or incomplete, or ladder appears unstable/unsecured
+- Label: "working_at_height" — draw box around the person at height
+
+**D. PERSON FALLEN / COLLAPSE**
+- Look for: a person lying flat on the ground (face-up or face-down) in an area where work is occurring; person in an abnormal posture suggesting a fall or collapse
+- Do NOT flag people who are clearly sitting/resting in a designated rest area
+- Label: "person_fallen" — draw box around the fallen person
+
+**E. OTHER SAFETY CONCERN**
+- Any other clearly visible and significant safety hazard not covered above
+- Examples: unsecured load about to fall, deep excavation without barriers, electrical hazard, chemical spill, blocked emergency exit with people nearby
+- Label: "safety_hazard" — draw box around the hazard area; use "description" to briefly explain what it is
+
 You analyze images with a strong focus on:
 
 1. **Construction site safety** (PPE compliance, fall risks, unsafe machinery, missing barriers, improper scaffolding, workers in danger zones, lifting operations, hazardous material handling).
@@ -151,6 +180,13 @@ Return your output STRICTLY as valid JSON with this exact structure (no markdown
   "peopleCount": 0,
   "missingHardhats": 0,
   "missingVests": 0,
+  "detections": [
+    {
+      "label": "person_ok" | "no_hardhat" | "no_vest" | "no_hardhat_no_vest" | "fire_smoke" | "smoking" | "machine_proximity" | "working_at_height" | "person_fallen" | "safety_hazard",
+      "bbox": [y_min, x_min, y_max, x_max],
+      "description": "brief note e.g. worker on scaffold without harness"
+    }
+  ],
   "constructionSafety": {
     "summary": "1–2 sentence summary",
     "issues": ["bullet point", "bullet point"],
@@ -167,6 +203,13 @@ Return your output STRICTLY as valid JSON with this exact structure (no markdown
     "recommendations": ["bullet point", "bullet point"]
   }
 }
+
+**BOUNDING BOX INSTRUCTIONS:**
+- For EACH person (STEP 1) add one entry: label is "person_ok", "no_hardhat", "no_vest", or "no_hardhat_no_vest".
+- For EACH hazard found in STEP 4 add one entry: label is "fire_smoke", "smoking", "machine_proximity", "working_at_height", "person_fallen", or "safety_hazard".
+- "bbox" must be [y_min, x_min, y_max, x_max] with integer values 0–1000 (normalized image coordinates).
+- Always include a brief "description" — especially for "safety_hazard" (explain what hazard was found).
+- If nothing is visible, set "detections" to [].
 
 **CRITICAL: You MUST carefully count people and identify missing PPE:**
 
@@ -270,17 +313,20 @@ const BASE_ALERT_PROMPT = `You are a safety inspector AI. Analyze this image and
 4. Report the counts in the peopleCount, missingHardhats, and missingVests fields
 
 Focus on:
-1. **Construction hazards**: Missing PPE, fall risks, unsafe machinery, workers in danger
-2. **Fire hazards**: Blocked exits, flammable materials near heat, visible fire/smoke, electrical hazards
-3. **Security issues**: Unauthorized access, breached perimeter, suspicious activity
+1. **PPE violations**: Missing hardhats or safety vests
+2. **Fire / smoke / smoking**: Visible flames, smoke, or someone smoking on site
+3. **Machine-person danger**: Heavy machinery dangerously close to a worker
+4. **Working at height**: Worker on ladder/scaffold/roof without harness or guardrail
+5. **Person fallen**: Worker lying on ground in abnormal posture
+6. **Other hazards**: Any other clearly visible safety risk (unsecured loads, electrical hazards, chemical spills, blocked exits, etc.)
 
 Rules:
 - Only report VISIBLE issues that pose real safety risks
 - Categorize each alert as: construction, fire, or security
 - Rate severity: low, medium, high, or critical
-- Be concise - one sentence per alert
+- Be concise — one sentence per alert
 - If no significant alerts, return empty alerts array
-- Skip minor issues or observations
+- Fire/smoke/smoking → fire category; machine proximity/height/fallen/PPE → construction; unauthorized access → security
 
 Return STRICT JSON (no markdown):
 {
@@ -289,6 +335,13 @@ Return STRICT JSON (no markdown):
   "peopleCount": 0,
   "missingHardhats": 0,
   "missingVests": 0,
+  "detections": [
+    {
+      "label": "person_ok" | "no_hardhat" | "no_vest" | "no_hardhat_no_vest" | "fire_smoke" | "smoking" | "machine_proximity" | "working_at_height" | "person_fallen" | "safety_hazard",
+      "bbox": [y_min, x_min, y_max, x_max],
+      "description": "brief note"
+    }
+  ],
   "alerts": [
     {
       "category": "construction" | "fire" | "security",
@@ -297,6 +350,16 @@ Return STRICT JSON (no markdown):
     }
   ]
 }
+
+**BOUNDING BOX INSTRUCTIONS:**
+- For EACH person: label is "person_ok", "no_hardhat", "no_vest", or "no_hardhat_no_vest".
+- For fire/smoke area: label "fire_smoke". For a person smoking: label "smoking".
+- For machine too close to person: label "machine_proximity" (box around both).
+- For unsafe height work: label "working_at_height" (box around the worker).
+- For fallen person: label "person_fallen" (box around them).
+- For any other hazard: label "safety_hazard" with description explaining the risk.
+- bbox: [y_min, x_min, y_max, x_max] integers 0–1000.
+- If nothing found, set "detections" to [].
 
 **CRITICAL: You MUST carefully count people and identify missing PPE:**
 

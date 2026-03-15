@@ -1,10 +1,14 @@
 /**
  * API Configuration
- * Centralized configuration for all API endpoints
+ * Centralized configuration for all API endpoints.
+ *
+ * All API calls use same-origin relative URLs so nginx on port 3000
+ * can reverse-proxy them to the correct backend service.
+ * This means only port 3000 needs to be exposed externally.
  */
 
-export const YOLO_API_URL = process.env.REACT_APP_YOLO_API_URL || 'http://localhost:8000';
-export const GEMINI_API_URL = process.env.REACT_APP_GEMINI_API_URL || 'http://localhost:3001';
+export const YOLO_API_URL   = process.env.REACT_APP_YOLO_API_URL   || '';
+export const GEMINI_API_URL = process.env.REACT_APP_GEMINI_API_URL || '';
 
 /**
  * API Endpoints

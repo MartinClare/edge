@@ -196,7 +196,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       },
       ui: {
         deepVisionEnabled: settings.deepVisionEnabled,
-        defaultAnalysisMode: settings.deepVisionEnabled ? 'gemini' : 'yolo',
+        defaultAnalysisMode: 'gemini',
       },
       centralServer: settings.centralServer,
       vpn: settings.vpn,

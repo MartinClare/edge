@@ -40,7 +40,7 @@ function App() {
   );
 
   const [inputSource, setInputSource] = useState<InputSource>('rtsp'); // Default to RTSP from config
-  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('yolo');
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('gemini');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -67,9 +67,7 @@ function App() {
         if (config.ui?.defaultInputSource) {
           setInputSource(config.ui.defaultInputSource);
         }
-        if (config.ui?.deepVisionEnabled === false) {
-          setAnalysisMode('yolo');
-        } else if (config.ui?.defaultAnalysisMode) {
+        if (config.ui?.defaultAnalysisMode) {
           setAnalysisMode(config.ui.defaultAnalysisMode);
         } else {
           // Default behavior: Deep Vision ON unless explicitly disabled in app.config.json
@@ -108,7 +106,6 @@ function App() {
     } else if (filePath) {
       // For folder videos, create HTTP URL to serve from Python backend
       const filename = filePath.split(/[/\\]/).pop() || filePath;
-      const YOLO_API_URL = process.env.REACT_APP_YOLO_API_URL || 'http://localhost:8000';
       setVideoUrl(`${YOLO_API_URL}/videos/${encodeURIComponent(filename)}`);
     }
     // Clear all video-related results when selecting a new video

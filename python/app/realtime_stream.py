@@ -18,9 +18,12 @@ from .config import YOLO_INPUT_SIZE, STREAM_JPEG_QUALITY
 
 logger = logging.getLogger(__name__)
 
-_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="rtsp")
+_pool = ThreadPoolExecutor(max_workers=16, thread_name_prefix="rtsp")
 
-CONNECT_TIMEOUT_SEC = 15
+CONNECT_TIMEOUT_SEC = 30
+
+STREAM_MAX_WIDTH = 960
+STREAM_JPEG_QUALITY_REMOTE = 55
 
 
 def _open_capture_blocking(rtsp_url: str) -> cv2.VideoCapture:
@@ -29,26 +32,45 @@ def _open_capture_blocking(rtsp_url: str) -> cv2.VideoCapture:
 
 
 def _grab_and_process(cap: cv2.VideoCapture) -> tuple:
-    """Flush buffer, read one frame, encode to JPEG — all blocking ops in one call."""
+    """Flush buffer, read one frame, run detection, encode to JPEG for display.
+
+    The display frame is down-scaled to STREAM_MAX_WIDTH to keep bandwidth
+    manageable for remote (WAN) viewers.  Detection bounding-box coordinates
+    are mapped back to the *display* frame so the frontend can draw them
+    directly on the canvas.
+    """
     flush_video_buffer(cap, max_frames=3)
     ret, frame = cap.read()
     if not ret or frame is None:
         return False, None, None
 
     h, w = frame.shape[:2]
+
+    # --- Detection on a fixed-size input ---------------------------------
     if w > YOLO_INPUT_SIZE:
-        scale = YOLO_INPUT_SIZE / w
-        detection_frame = cv2.resize(frame, (YOLO_INPUT_SIZE, int(h * scale)))
+        det_scale = YOLO_INPUT_SIZE / w
+        detection_frame = cv2.resize(frame, (YOLO_INPUT_SIZE, int(h * det_scale)))
     else:
         detection_frame = frame
-        scale = 1.0
+        det_scale = 1.0
 
     detections = detect_frame(detection_frame)
-    if scale != 1.0:
-        for det in detections:
-            det.bbox = [coord / scale for coord in det.bbox]
 
-    _, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY])
+    # --- Display frame (down-scaled for bandwidth) -----------------------
+    if w > STREAM_MAX_WIDTH:
+        disp_scale = STREAM_MAX_WIDTH / w
+        display_frame = cv2.resize(frame, (STREAM_MAX_WIDTH, int(h * disp_scale)))
+    else:
+        disp_scale = 1.0
+        display_frame = frame
+
+    # Map detection boxes from the detection frame to the display frame
+    box_scale = disp_scale / det_scale if det_scale != 0 else 1.0
+    for det in detections:
+        det.bbox = [coord * box_scale for coord in det.bbox]
+
+    _, buf = cv2.imencode('.jpg', display_frame,
+                          [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY_REMOTE])
     frame_b64 = base64.b64encode(buf).decode('utf-8')
 
     return True, frame_b64, detections
@@ -60,6 +82,9 @@ async def stream_rtsp_realtime(websocket: WebSocket, rtsp_url: str, fps_limit: i
 
     Blocking OpenCV work runs in a thread pool so the event loop can still
     serve other WebSocket connections and HTTP requests concurrently.
+
+    Back-pressure: if sending a frame takes longer than the frame interval,
+    the next capture is skipped so the send queue doesn't grow unboundedly.
     """
     cap = None
     loop = asyncio.get_event_loop()
@@ -86,20 +111,27 @@ async def stream_rtsp_realtime(websocket: WebSocket, rtsp_url: str, fps_limit: i
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         stream_fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
 
+        disp_w = min(width, STREAM_MAX_WIDTH)
+        disp_h = int(height * (disp_w / width)) if width > 0 else height
+
         await websocket.send_json({
             "type": "stream_info",
-            "width": width,
-            "height": height,
+            "width": disp_w,
+            "height": disp_h,
             "fps": stream_fps,
         })
 
-        logger.info(f"Streaming {width}x{height} @ {stream_fps} fps (limited to {fps_limit} fps)")
+        logger.info(
+            f"Streaming {width}x{height} → {disp_w}x{disp_h} @ {stream_fps} fps "
+            f"(limited to {fps_limit} fps)"
+        )
 
         frame_count = 0
         frame_interval = 1.0 / fps_limit
         last_send_time = 0.0
         consecutive_errors = 0
         max_consecutive_errors = 10
+        send_timeout = 3.0  # drop frame if send takes longer than this
 
         while True:
             # Non-blocking check for client commands
@@ -146,23 +178,29 @@ async def stream_rtsp_realtime(websocket: WebSocket, rtsp_url: str, fps_limit: i
             frame_count += 1
 
             try:
-                await websocket.send_json({
-                    "type": "frame",
-                    "frame_index": frame_count,
-                    "timestamp": loop.time(),
-                    "frame_data": frame_b64,
-                    "detections": [
-                        {
-                            "id": d.id,
-                            "class_id": d.class_id,
-                            "class_name": d.class_name,
-                            "confidence": d.confidence,
-                            "bbox": d.bbox,
-                        }
-                        for d in detections
-                    ],
-                })
+                await asyncio.wait_for(
+                    websocket.send_json({
+                        "type": "frame",
+                        "frame_index": frame_count,
+                        "timestamp": loop.time(),
+                        "frame_data": frame_b64,
+                        "detections": [
+                            {
+                                "id": d.id,
+                                "class_id": d.class_id,
+                                "class_name": d.class_name,
+                                "confidence": d.confidence,
+                                "bbox": d.bbox,
+                            }
+                            for d in detections
+                        ],
+                    }),
+                    timeout=send_timeout,
+                )
                 last_send_time = loop.time()
+            except asyncio.TimeoutError:
+                logger.warning("Frame send timed out (slow client), skipping")
+                continue
             except WebSocketDisconnect:
                 break
             except Exception as e:
