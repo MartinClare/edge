@@ -7,7 +7,8 @@
       "enableRTSP": true
     },
     "defaultInputSource": "rtsp",
-    "defaultAnalysisMode": "gemini"
+    "defaultAnalysisMode": "gemini",
+    "deepVisionEnabled": true
   },
   "rtsp": {
     "cameras": [
@@ -45,7 +46,7 @@
       }
     ],
     "fpsLimit": 15,
-    "geminiInterval": 5,
+    "geminiInterval": 60,
     "autoStart": true
   },
   "debug": {

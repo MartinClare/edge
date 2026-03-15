@@ -65,6 +65,30 @@ app.include_router(alarm_router)
 _deepvision_task: Optional[asyncio.Task] = None
 _deepvision_camera_index: int = 0
 _latest_deepvision_results: dict[str, dict] = {}
+_DEEPVISION_CACHE_FILE = Path(__file__).resolve().parent.parent / "deepvision_cache.json"
+
+
+def _load_deepvision_cache() -> dict[str, dict]:
+    """Load persisted Deep Vision results so restarts don't lose data."""
+    try:
+        if _DEEPVISION_CACHE_FILE.exists():
+            with open(_DEEPVISION_CACHE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                logger.info(f"Restored {len(data)} Deep Vision results from cache")
+                return data
+    except Exception as exc:
+        logger.warning(f"Could not load Deep Vision cache: {exc}")
+    return {}
+
+
+def _save_deepvision_cache():
+    """Persist latest Deep Vision results to disk."""
+    try:
+        with open(_DEEPVISION_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(_latest_deepvision_results, f)
+    except Exception as exc:
+        logger.debug(f"Could not save Deep Vision cache: {exc}")
 
 
 def _root_app_config_path() -> Path:
@@ -85,10 +109,12 @@ def _load_runtime_config() -> dict:
 
 
 def _capture_jpeg_from_rtsp(rtsp_url: str) -> Optional[bytes]:
+    from .realtime_stream import _cv2_lock
     cap = None
     try:
-        cap = open_video_capture(rtsp_url)
-        ret, frame = cap.read()
+        with _cv2_lock:
+            cap = open_video_capture(rtsp_url)
+            ret, frame = cap.read()
         if not ret or frame is None:
             return None
         ok, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
@@ -198,7 +224,8 @@ def _build_alarm_payload(camera_id: str, camera_name: str, result: dict) -> dict
 
 
 async def _deepvision_background_loop():
-    global _deepvision_camera_index
+    global _deepvision_camera_index, _latest_deepvision_results
+    _latest_deepvision_results = _load_deepvision_cache()
     logger.info("Deep Vision background loop started")
     while True:
         try:
@@ -248,6 +275,7 @@ async def _deepvision_background_loop():
                         "propertySecurity": payload.get("propertySecurity") or {"summary": "", "issues": [], "recommendations": []},
                     },
                 }
+                _save_deepvision_cache()
                 observer = get_alarm_observer()
                 await asyncio.to_thread(observer.process_analysis_result, payload, camera_id, camera_name)
 

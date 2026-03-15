@@ -2,6 +2,9 @@
 
 All blocking OpenCV calls (connect, read, encode) are offloaded to a thread
 pool so the uvicorn async event loop stays responsive even with a single worker.
+
+A global threading lock serialises FFmpeg-backed cv2 operations to avoid
+SIGSEGV caused by concurrent access to non-thread-safe native code.
 """
 
 import cv2
@@ -9,7 +12,7 @@ import base64
 import asyncio
 import json
 import logging
-import time
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import WebSocket, WebSocketDisconnect
 from .video_utils import open_video_capture, flush_video_buffer
@@ -18,7 +21,8 @@ from .config import YOLO_INPUT_SIZE, STREAM_JPEG_QUALITY
 
 logger = logging.getLogger(__name__)
 
-_pool = ThreadPoolExecutor(max_workers=16, thread_name_prefix="rtsp")
+_pool = ThreadPoolExecutor(max_workers=6, thread_name_prefix="rtsp")
+_cv2_lock = threading.Lock()
 
 CONNECT_TIMEOUT_SEC = 30
 
@@ -28,7 +32,8 @@ STREAM_JPEG_QUALITY_REMOTE = 55
 
 def _open_capture_blocking(rtsp_url: str) -> cv2.VideoCapture:
     """Open RTSP stream in a worker thread (may block for several seconds)."""
-    return open_video_capture(rtsp_url)
+    with _cv2_lock:
+        return open_video_capture(rtsp_url)
 
 
 def _grab_and_process(cap: cv2.VideoCapture) -> tuple:
@@ -39,14 +44,15 @@ def _grab_and_process(cap: cv2.VideoCapture) -> tuple:
     are mapped back to the *display* frame so the frontend can draw them
     directly on the canvas.
     """
-    flush_video_buffer(cap, max_frames=3)
-    ret, frame = cap.read()
+    with _cv2_lock:
+        flush_video_buffer(cap, max_frames=3)
+        ret, frame = cap.read()
+
     if not ret or frame is None:
         return False, None, None
 
     h, w = frame.shape[:2]
 
-    # --- Detection on a fixed-size input ---------------------------------
     if w > YOLO_INPUT_SIZE:
         det_scale = YOLO_INPUT_SIZE / w
         detection_frame = cv2.resize(frame, (YOLO_INPUT_SIZE, int(h * det_scale)))
@@ -56,7 +62,6 @@ def _grab_and_process(cap: cv2.VideoCapture) -> tuple:
 
     detections = detect_frame(detection_frame)
 
-    # --- Display frame (down-scaled for bandwidth) -----------------------
     if w > STREAM_MAX_WIDTH:
         disp_scale = STREAM_MAX_WIDTH / w
         display_frame = cv2.resize(frame, (STREAM_MAX_WIDTH, int(h * disp_scale)))
@@ -64,7 +69,6 @@ def _grab_and_process(cap: cv2.VideoCapture) -> tuple:
         disp_scale = 1.0
         display_frame = frame
 
-    # Map detection boxes from the detection frame to the display frame
     box_scale = disp_scale / det_scale if det_scale != 0 else 1.0
     for det in detections:
         det.bbox = [coord * box_scale for coord in det.bbox]
@@ -76,7 +80,7 @@ def _grab_and_process(cap: cv2.VideoCapture) -> tuple:
     return True, frame_b64, detections
 
 
-async def stream_rtsp_realtime(websocket: WebSocket, rtsp_url: str, fps_limit: int = 15):
+async def stream_rtsp_realtime(websocket: WebSocket, rtsp_url: str, fps_limit: int = 10):
     """
     Stream RTSP video with real-time detection via WebSocket.
 
@@ -131,10 +135,9 @@ async def stream_rtsp_realtime(websocket: WebSocket, rtsp_url: str, fps_limit: i
         last_send_time = 0.0
         consecutive_errors = 0
         max_consecutive_errors = 10
-        send_timeout = 3.0  # drop frame if send takes longer than this
+        send_timeout = 3.0
 
         while True:
-            # Non-blocking check for client commands
             try:
                 message = await asyncio.wait_for(websocket.receive_text(), timeout=0.001)
                 data = json.loads(message)
@@ -146,13 +149,11 @@ async def stream_rtsp_realtime(websocket: WebSocket, rtsp_url: str, fps_limit: i
             except WebSocketDisconnect:
                 break
 
-            # Rate-limit: sleep until next frame is due
             now = loop.time()
             wait = frame_interval - (now - last_send_time)
             if wait > 0:
                 await asyncio.sleep(wait)
 
-            # Offload blocking OpenCV work to thread pool
             try:
                 ret, frame_b64, detections = await asyncio.wait_for(
                     loop.run_in_executor(_pool, _grab_and_process, cap),
