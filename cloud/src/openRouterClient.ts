@@ -24,14 +24,27 @@ export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 /**
- * Available models on OpenRouter:
- * - google/gemini-3-flash-preview: Gemini 3 Flash Preview (fast, near-Pro quality, best for real-time)
- * - google/gemini-3.1-pro-preview: Gemini 3.1 Pro Preview (highest accuracy)
- * - google/gemini-2.5-flash: Gemini 2.5 Flash (stable, reasoning capable)
- * - google/gemini-2.5-pro: Gemini 2.5 Pro (high quality, stable)
- * - anthropic/claude-3.5-sonnet: Claude 3.5 (alternative)
+ * Gemini (and other) models on OpenRouter that support image input for vision/safety analysis:
+ *
+ * Recommended (vision-capable, stable):
+ * - google/gemini-3.1-pro-preview   — Gemini 3.1 Pro (highest accuracy, frontier)
+ * - google/gemini-3.1-flash-lite-preview — Gemini 3.1 Flash Lite (faster, cheaper)
+ * - google/gemini-3-flash-preview   — Gemini 3 Flash (fast, near-Pro)
+ * - google/gemini-2.5-pro           — Gemini 2.5 Pro (stable, high quality)
+ * - google/gemini-2.5-flash         — Gemini 2.5 Flash (stable, good balance)
+ * - google/gemini-2.5-flash-lite    — Gemini 2.5 Flash Lite (low cost, fast)
+ *
+ * Older / being retired:
+ * - google/gemini-3-pro-preview     — deprecating Mar 2026
+ * - google/gemini-2.0-flash-001     — deprecating Jun 2026 (cheapest; use 2.5 when expired)
+ * - google/gemini-2.0-flash-lite-001 — deprecating Jun 2026
+ *
+ * Full list: https://openrouter.ai/models (filter by "Image" input)
  */
-export const MODEL_NAME = 'google/gemini-3.1-pro-preview';
+/** Primary: Gemini 2.0 Flash (cheapest). When deprecated Jun 2026, switch to FALLBACK_MODEL. */
+export const MODEL_NAME = 'google/gemini-2.0-flash-001';
+/** Fallback when 2.0 Flash is retired. Change MODEL_NAME to this when 2.0 returns errors. */
+export const FALLBACK_MODEL = 'google/gemini-2.5-flash';
 
 /**
  * Supported languages for analysis output

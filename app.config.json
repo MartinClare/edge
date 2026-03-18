@@ -23,7 +23,7 @@
       {
         "id": "camera2",
         "name": "site_b_09",
-        "url": "rtsp://admin:123456@192.168.10.3:554/Streaming/Channels/1",
+        "url": "rtsp://192.168.10.146:8554",
         "enabled": false,
         "tailscaleUrl": "",
         "useTailscale": false
@@ -31,7 +31,7 @@
       {
         "id": "camera3",
         "name": "site_b_11",
-        "url": "rtsp://admin:123456@192.168.10.3:554/Streaming/Channels/1",
+        "url": "rtsp://192.168.10.161:8554",
         "enabled": false,
         "tailscaleUrl": "",
         "useTailscale": false
@@ -39,7 +39,7 @@
       {
         "id": "camera4",
         "name": "site_a_04",
-        "url": "rtsp://admin:123456@192.168.10.3:554/Streaming/Channels/1",
+        "url": "rtsp://192.168.10.126:8554",
         "enabled": false,
         "tailscaleUrl": "",
         "useTailscale": false
