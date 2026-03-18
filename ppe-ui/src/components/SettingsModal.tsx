@@ -81,6 +81,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [hasChanges, setHasChanges] = useState(false);
   const [serviceStatus, setServiceStatus] = useState<Record<string, { label: string; status: string }> | null>(null);
   const [serviceStatusLoading, setServiceStatusLoading] = useState(false);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanResult, setScanResult] = useState<Array<{ ip: string; port: number; path: string; url: string; resolution?: string; fps?: number }> | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanNetworkPrefix, setScanNetworkPrefix] = useState('192.168.10');
+  const [scanUsername, setScanUsername] = useState('admin');
+  const [scanPassword, setScanPassword] = useState('123456');
 
   const fetchServiceStatus = useCallback(async () => {
     setServiceStatusLoading(true);
@@ -277,6 +283,38 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const getEffectiveName = (camera: CameraConfig) => {
     return cameraNames[camera.id] || camera.name;
+  };
+
+  const handleScanCameras = async () => {
+    setScanLoading(true);
+    setScanError(null);
+    setScanResult(null);
+    try {
+      const params = new URLSearchParams({
+        network_prefix: scanNetworkPrefix,
+        username: scanUsername,
+        password: scanPassword,
+      });
+      const res = await fetch(`${YOLO_API_URL}/api/scan-cameras?${params}`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setScanError(data?.detail || `Scan failed (${res.status})`);
+        return;
+      }
+      if (data.success && Array.isArray(data.cameras)) {
+        setScanResult(data.cameras);
+      } else {
+        setScanResult([]);
+      }
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : 'Network error');
+    } finally {
+      setScanLoading(false);
+    }
+  };
+
+  const applyScannedUrlToCamera = (cameraId: string, url: string) => {
+    handleCameraUrlChange(cameraId, url);
   };
 
   const isEnabledEdited = (camera: CameraConfig) => {
@@ -665,6 +703,161 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Scan network for cameras */}
+          <div>
+            <h3 style={{ color: '#00d9ff', fontSize: '1.1rem', marginBottom: '0.75rem' }}>
+              🔍 Scan network for cameras
+            </h3>
+            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+              Discover RTSP cameras on your network (scan may take 1–2 minutes).
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', marginBottom: '1rem' }}>
+              <input
+                type="text"
+                value={scanNetworkPrefix}
+                onChange={(e) => setScanNetworkPrefix(e.target.value)}
+                placeholder="192.168.10"
+                style={{
+                  width: '120px',
+                  padding: '0.5rem',
+                  borderRadius: '4px',
+                  border: '1px solid rgba(0, 217, 255, 0.3)',
+                  background: 'rgba(0, 0, 0, 0.4)',
+                  color: '#fff',
+                  fontSize: '0.9rem',
+                }}
+                title="Network prefix (e.g. 192.168.10)"
+              />
+              <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem' }}>.0/24</span>
+              <input
+                type="text"
+                value={scanUsername}
+                onChange={(e) => setScanUsername(e.target.value)}
+                placeholder="Username"
+                style={{
+                  width: '90px',
+                  padding: '0.5rem',
+                  borderRadius: '4px',
+                  border: '1px solid rgba(0, 217, 255, 0.3)',
+                  background: 'rgba(0, 0, 0, 0.4)',
+                  color: '#fff',
+                  fontSize: '0.9rem',
+                }}
+              />
+              <input
+                type="password"
+                value={scanPassword}
+                onChange={(e) => setScanPassword(e.target.value)}
+                placeholder="Password"
+                style={{
+                  width: '90px',
+                  padding: '0.5rem',
+                  borderRadius: '4px',
+                  border: '1px solid rgba(0, 217, 255, 0.3)',
+                  background: 'rgba(0, 0, 0, 0.4)',
+                  color: '#fff',
+                  fontSize: '0.9rem',
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleScanCameras}
+                disabled={scanLoading}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '6px',
+                  border: '1px solid #00d9ff',
+                  background: scanLoading ? 'rgba(0, 217, 255, 0.2)' : 'rgba(0, 217, 255, 0.15)',
+                  color: '#00d9ff',
+                  fontWeight: 600,
+                  cursor: scanLoading ? 'wait' : 'pointer',
+                  fontSize: '0.9rem',
+                }}
+              >
+                {scanLoading ? '⏳ Scanning…' : '📡 Scan'}
+              </button>
+            </div>
+            {scanError && (
+              <div style={{ padding: '0.75rem', background: 'rgba(244, 67, 54, 0.15)', border: '1px solid rgba(244, 67, 54, 0.4)', borderRadius: '6px', color: '#f44336', marginBottom: '1rem', fontSize: '0.9rem' }}>
+                {scanError}
+              </div>
+            )}
+            {scanResult !== null && (
+              <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'rgba(0, 0, 0, 0.25)', borderRadius: '8px', border: '1px solid rgba(0, 217, 255, 0.2)' }}>
+                <div style={{ fontWeight: 600, color: '#00d9ff', marginBottom: '0.75rem' }}>
+                  Found {scanResult.length} camera(s)
+                </div>
+                {scanResult.length === 0 ? (
+                  <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>No RTSP cameras found. Check network prefix and credentials.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {scanResult.map((cam, idx) => (
+                      <div
+                        key={`${cam.ip}-${cam.port}-${idx}`}
+                        style={{
+                          padding: '0.75rem',
+                          background: 'rgba(0, 0, 0, 0.3)',
+                          borderRadius: '6px',
+                          border: '1px solid rgba(0, 217, 255, 0.15)',
+                          fontSize: '0.85rem',
+                        }}
+                      >
+                        <div style={{ color: 'rgba(255,255,255,0.9)', marginBottom: '0.35rem' }}>
+                          {cam.ip}:{cam.port}{cam.path}
+                          {cam.resolution && (
+                            <span style={{ color: 'rgba(255,255,255,0.5)', marginLeft: '0.5rem' }}>
+                              — {cam.resolution}
+                              {cam.fps != null && ` @ ${cam.fps} fps`}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <code style={{ flex: 1, minWidth: 0, wordBreak: 'break-all', color: '#00d9ff', fontSize: '0.8rem' }}>
+                            {cam.url}
+                          </code>
+                          <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem' }}>Apply to:</span>
+                          <select
+                            style={{
+                              padding: '0.25rem 0.5rem',
+                              borderRadius: '4px',
+                              border: '1px solid rgba(0, 217, 255, 0.3)',
+                              background: 'rgba(0, 0, 0, 0.5)',
+                              color: '#fff',
+                              fontSize: '0.8rem',
+                            }}
+                            id={`scan-apply-${idx}`}
+                          >
+                            {cameras.map((c) => (
+                              <option key={c.id} value={c.id}>{getEffectiveName(c)} ({c.id})</option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const sel = document.getElementById(`scan-apply-${idx}`) as HTMLSelectElement;
+                              if (sel) applyScannedUrlToCamera(sel.value, cam.url);
+                            }}
+                            style={{
+                              padding: '0.25rem 0.6rem',
+                              borderRadius: '4px',
+                              border: '1px solid #4caf50',
+                              background: 'rgba(76, 175, 80, 0.2)',
+                              color: '#4caf50',
+                              cursor: 'pointer',
+                              fontSize: '0.8rem',
+                            }}
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Camera URLs */}

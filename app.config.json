@@ -15,7 +15,7 @@
       {
         "id": "camera1",
         "name": "site_b_08",
-        "url": "rtsp://fnnas.cccl4s.com:8554/site_b_08",
+        "url": "rtsp://admin:123456@192.168.10.3:554/Streaming/Channels/1",
         "enabled": true,
         "tailscaleUrl": "",
         "useTailscale": false
@@ -23,30 +23,30 @@
       {
         "id": "camera2",
         "name": "site_b_09",
-        "url": "rtsp://fnnas.cccl4s.com:8554/site_b_09",
-        "enabled": true,
+        "url": "rtsp://admin:123456@192.168.10.3:554/Streaming/Channels/1",
+        "enabled": false,
         "tailscaleUrl": "",
         "useTailscale": false
       },
       {
         "id": "camera3",
         "name": "site_b_11",
-        "url": "rtsp://fnnas.cccl4s.com:8554/site_b_11",
-        "enabled": true,
+        "url": "rtsp://admin:123456@192.168.10.3:554/Streaming/Channels/1",
+        "enabled": false,
         "tailscaleUrl": "",
         "useTailscale": false
       },
       {
         "id": "camera4",
         "name": "site_a_04",
-        "url": "rtsp://fnnas.cccl4s.com:8554/site_a_04",
-        "enabled": true,
+        "url": "rtsp://admin:123456@192.168.10.3:554/Streaming/Channels/1",
+        "enabled": false,
         "tailscaleUrl": "",
         "useTailscale": false
       }
     ],
     "fpsLimit": 15,
-    "geminiInterval": 60,
+    "geminiInterval": 5,
     "autoStart": true
   },
   "debug": {
@@ -59,7 +59,7 @@
     "apiKey": "axonedge852852"
   },
   "network": {
-    "camera_lan": "eth2",
+    "camera_lan": "eth1",
     "internet": "eth1",
     "vpn": "eth1",
     "cmp": "eth1"
@@ -69,6 +69,6 @@
   },
   "tailscale": {
     "enabled": true,
-    "mode": "outbound"
+    "mode": "inbound"
   }
 }

@@ -70,6 +70,7 @@ const RTSPLiveStream: React.FC<RTSPLiveStreamProps> = ({
   // Default false = do not auto-start; live stream is still startable via button
   const [autoStart, setAutoStart] = useState(propAutoStart ?? false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [streamError, setStreamError] = useState<string | null>(null);
   const [frameCount, setFrameCount] = useState(0);
   const [fps, setFps] = useState(0);
   const [detections, setDetections] = useState<Detection[]>([]);
@@ -178,6 +179,7 @@ const RTSPLiveStream: React.FC<RTSPLiveStreamProps> = ({
     }
 
     manualDisconnectRef.current = false;
+    setStreamError(null);
     console.log(`[RTSP-${cameraId}] Starting connection...`);
 
     // Reset stats and Gemini state
@@ -370,6 +372,7 @@ const RTSPLiveStream: React.FC<RTSPLiveStreamProps> = ({
         }
       } else if (data.type === 'error') {
         console.error('Stream error:', data.message);
+        setStreamError(data.message || 'Stream failed');
         setIsStreaming(false);
         scheduleReconnect(`stream error: ${data.message}`);
       }
@@ -732,6 +735,23 @@ const RTSPLiveStream: React.FC<RTSPLiveStreamProps> = ({
               💡 To change settings, edit <code>app.config.json</code>
             </small>
           </div>
+
+          {streamError && (
+            <div style={{
+              padding: '0.75rem 1rem',
+              marginBottom: '1rem',
+              background: 'rgba(244, 67, 54, 0.15)',
+              border: '1px solid rgba(244, 67, 54, 0.4)',
+              borderRadius: '8px',
+              color: '#ff8a80',
+              fontSize: '0.9rem',
+            }}>
+              <strong>Stream error:</strong> {streamError}
+              <div style={{ marginTop: '0.35rem', fontSize: '0.85rem', opacity: 0.9 }}>
+                Check the RTSP URL (port, path, credentials) and that the camera is reachable. Use Settings → Scan network to discover working URLs.
+              </div>
+            </div>
+          )}
 
           <button
             className="connect-btn"
