@@ -20,11 +20,6 @@ interface AppSettings {
   geminiInterval: number;
   autoStart: boolean;
   deepVisionEnabled: boolean;
-  centralServer: {
-    enabled: boolean;
-    url: string;
-    apiKey: string;
-  };
   vpn: { enabled: boolean };
   tailscale: {
     enabled: boolean;
@@ -38,9 +33,6 @@ interface SettingsModalProps {
   configGeminiInterval: number;
   configAutoStart: boolean;
   configDeepVisionEnabled: boolean;
-  configCmpEnabled: boolean;
-  configCmpUrl: string;
-  configCmpApiKey: string;
   configVpnEnabled: boolean;
   configTailscaleEnabled: boolean;
   configTailscaleMode: 'inbound' | 'outbound';
@@ -54,9 +46,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   configGeminiInterval,
   configAutoStart,
   configDeepVisionEnabled,
-  configCmpEnabled,
-  configCmpUrl,
-  configCmpApiKey,
   configVpnEnabled,
   configTailscaleEnabled,
   configTailscaleMode,
@@ -72,9 +61,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [geminiInterval, setGeminiInterval] = useState(configGeminiInterval);
   const [autoStart, setAutoStart] = useState(configAutoStart);
   const [deepVisionEnabled, setDeepVisionEnabled] = useState(configDeepVisionEnabled);
-  const [cmpEnabled, setCmpEnabled] = useState(configCmpEnabled);
-  const [cmpUrl, setCmpUrl] = useState(configCmpUrl);
-  const [cmpApiKey, setCmpApiKey] = useState(configCmpApiKey);
   const [vpnEnabled, setVpnEnabled] = useState(configVpnEnabled);
   const [tailscaleEnabled, setTailscaleEnabled] = useState(configTailscaleEnabled);
   const [tailscaleMode, setTailscaleMode] = useState<'inbound' | 'outbound'>(configTailscaleMode);
@@ -172,11 +158,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       geminiInterval,
       autoStart,
       deepVisionEnabled,
-      centralServer: {
-        enabled: cmpEnabled,
-        url: cmpUrl.trim(),
-        apiKey: cmpApiKey.trim(),
-      },
       vpn: { enabled: vpnEnabled },
       tailscale: {
         enabled: tailscaleEnabled,
@@ -204,7 +185,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         deepVisionEnabled: settings.deepVisionEnabled,
         defaultAnalysisMode: 'gemini',
       },
-      centralServer: settings.centralServer,
       vpn: settings.vpn,
       tailscale: settings.tailscale,
     };
@@ -242,9 +222,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       setGeminiInterval(configGeminiInterval);
       setAutoStart(configAutoStart);
       setDeepVisionEnabled(configDeepVisionEnabled);
-      setCmpEnabled(configCmpEnabled);
-      setCmpUrl(configCmpUrl);
-      setCmpApiKey(configCmpApiKey);
       setVpnEnabled(configVpnEnabled);
       setTailscaleEnabled(configTailscaleEnabled);
       setTailscaleMode(configTailscaleMode);
@@ -556,77 +533,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <small style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem', marginLeft: '1.5rem', display: 'block', marginTop: '0.25rem' }}>
                   If disabled, default mode falls back to Realtime Detection (YOLO)
                 </small>
-              </div>
-
-              {/* CMP Settings */}
-              <div style={{ paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                <label style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  cursor: 'pointer',
-                  color: 'rgba(255,255,255,0.9)',
-                  fontSize: '0.9rem'
-                }}>
-                  <input
-                    type="checkbox"
-                    checked={cmpEnabled}
-                    onChange={(e) => {
-                      setCmpEnabled(e.target.checked);
-                      setHasChanges(true);
-                    }}
-                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                  />
-                  Enable CMP reporting
-                </label>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'rgba(255,255,255,0.9)', fontSize: '0.9rem' }}>
-                  CMP Webhook URL
-                </label>
-                <input
-                  type="text"
-                  value={cmpUrl}
-                  onChange={(e) => {
-                    setCmpUrl(e.target.value);
-                    setHasChanges(true);
-                  }}
-                  placeholder="http://192.168.1.170:3002/api/webhook/edge-report"
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    borderRadius: '4px',
-                    border: '1px solid rgba(0, 217, 255, 0.3)',
-                    background: 'rgba(0, 0, 0, 0.3)',
-                    color: '#fff',
-                    fontSize: '0.9rem'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'rgba(255,255,255,0.9)', fontSize: '0.9rem' }}>
-                  CMP API Key
-                </label>
-                <input
-                  type="text"
-                  value={cmpApiKey}
-                  onChange={(e) => {
-                    setCmpApiKey(e.target.value);
-                    setHasChanges(true);
-                  }}
-                  placeholder="CMP API key"
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    borderRadius: '4px',
-                    border: '1px solid rgba(0, 217, 255, 0.3)',
-                    background: 'rgba(0, 0, 0, 0.3)',
-                    color: '#fff',
-                    fontSize: '0.9rem'
-                  }}
-                />
               </div>
 
               {/* VPN (Mullvad) */}

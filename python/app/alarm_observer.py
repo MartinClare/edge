@@ -527,6 +527,57 @@ class AlarmObserver:
             self.last_central_server_image_event[camera_id] = now
         return True
 
+    def _append_history_log(self, log_entry: Dict[str, Any]) -> None:
+        """Append a normalized history record to the shared alarm history log."""
+        try:
+            log_config = self.config.get('logging', {})
+            if not log_config.get('enabled', True):
+                return
+
+            log_file = Path(log_config.get('file', 'logs/alarm-history.log'))
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_file, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_entry) + '\n')
+        except Exception as e:
+            logger.error(f"Failed to append history log: {e}")
+
+    def _log_central_server_record(
+        self,
+        camera_id: str,
+        camera_name: str,
+        analysis_result: Dict,
+        message_type: str,
+        event_image_included: bool,
+    ) -> None:
+        """Record successful CMP analysis sends in the alarm history log."""
+        if message_type != "analysis":
+            return
+
+        timestamp = datetime.utcnow().isoformat()
+        risk_level = str(analysis_result.get("overallRiskLevel", "low")).lower()
+        log_entry = {
+            "timestamp": timestamp,
+            "alarm_id": f"cmp-{camera_id}-{int(time.time() * 1000)}",
+            "camera_id": camera_id,
+            "risk_level": risk_level,
+            "risk_score": float(analysis_result.get("confidence", 0.0) or 0.0),
+            "state": "reported",
+            "actions": ["cmp_report"],
+            "details": {
+                "record_type": "cmp_report",
+                "camera_name": camera_name or camera_id,
+                "message_type": message_type,
+                "event_image_included": event_image_included,
+                "message": "CMP report sent"
+                + (" with image evidence" if event_image_included else " without image"),
+                "overall_description": analysis_result.get("overallDescription", ""),
+                "construction_safety": analysis_result.get("constructionSafety", {}),
+                "fire_safety": analysis_result.get("fireSafety", {}),
+                "property_security": analysis_result.get("propertySecurity", {}),
+            },
+        }
+        self._append_history_log(log_entry)
+
     def send_central_server_keepalive(
         self,
         camera_id: str,
@@ -677,6 +728,13 @@ class AlarmObserver:
 
                     if resp.ok:
                         logger.info(f"Central server {message_type} sent for {camera_id}")
+                        self._log_central_server_record(
+                            camera_id,
+                            camera_name,
+                            analysis_result,
+                            message_type,
+                            attach_event_image,
+                        )
                         return
                     logger.warning(f"Central server returned {resp.status_code} for {message_type} (attempt {attempt + 1}/{retry_attempts})")
                 except Exception as e:
@@ -737,13 +795,6 @@ class AlarmObserver:
     def _log_alarm(self, alarm_event: AlarmEvent):
         """Log alarm to file"""
         try:
-            log_config = self.config.get('logging', {})
-            if not log_config.get('enabled', True):
-                return
-            
-            log_file = Path(log_config.get('file', 'logs/alarm-history.log'))
-            log_file.parent.mkdir(parents=True, exist_ok=True)
-            
             log_entry = {
                 'timestamp': alarm_event.triggered_at.isoformat(),
                 'alarm_id': alarm_event.id,
@@ -754,10 +805,7 @@ class AlarmObserver:
                 'actions': alarm_event.actions_taken,
                 'details': alarm_event.risk_assessment.details
             }
-            
-            with open(log_file, 'a', encoding='utf-8') as f:
-                f.write(json.dumps(log_entry) + '\n')
-            
+            self._append_history_log(log_entry)
         except Exception as e:
             logger.error(f"Failed to log alarm: {e}")
     

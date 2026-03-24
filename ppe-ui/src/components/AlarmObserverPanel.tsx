@@ -560,6 +560,17 @@ const AlarmObserverPanel: React.FC = () => {
                   }}>
                     📷 Camera: {log.camera_id}
                   </div>
+
+                  {log.details?.record_type === 'cmp_report' && (
+                    <div style={{
+                      fontSize: '0.9rem',
+                      color: '#00d9ff',
+                      marginBottom: '0.25rem',
+                    }}>
+                      🌐 CMP Report
+                      {log.details?.event_image_included ? ' | Image attached' : ' | No image'}
+                    </div>
+                  )}
                   
                   {log.details?.condition_name && (
                     <div style={{

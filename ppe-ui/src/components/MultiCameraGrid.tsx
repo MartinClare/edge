@@ -239,7 +239,6 @@ const MultiCameraGrid: React.FC<MultiCameraGridProps> = ({
     geminiInterval: number; 
     autoStart: boolean;
     deepVisionEnabled: boolean;
-    centralServer: CentralServerConfig;
     vpn: VpnConfig;
     tailscale: { enabled: boolean; mode: 'inbound' | 'outbound' };
   }) => {
@@ -258,7 +257,6 @@ const MultiCameraGrid: React.FC<MultiCameraGridProps> = ({
         deepVisionEnabled: settings.deepVisionEnabled,
         defaultAnalysisMode: settings.deepVisionEnabled ? 'gemini' : 'yolo',
       },
-      centralServer: settings.centralServer,
       vpn: settings.vpn,
       tailscale: settings.tailscale,
     } : prev);
@@ -810,9 +808,6 @@ const MultiCameraGrid: React.FC<MultiCameraGridProps> = ({
           configGeminiInterval={config.rtsp.geminiInterval}
           configAutoStart={config.rtsp.autoStart}
           configDeepVisionEnabled={config.ui?.deepVisionEnabled !== false}
-          configCmpEnabled={config.centralServer?.enabled ?? false}
-          configCmpUrl={config.centralServer?.url ?? ''}
-          configCmpApiKey={config.centralServer?.apiKey ?? ''}
           configVpnEnabled={config.vpn?.enabled ?? true}
           configTailscaleEnabled={config.tailscale?.enabled ?? true}
           configTailscaleMode={config.tailscale?.mode ?? 'inbound'}
