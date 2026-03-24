@@ -57,6 +57,7 @@ function App() {
   const [yoloFps, setYoloFps] = useState<number>(15); // Default 15fps for real-time YOLO analysis
   const [currentAnalysisCameraId, setCurrentAnalysisCameraId] = useState<string | null>(null); // Track which camera sent the result
   const [currentAnalysisCameraName, setCurrentAnalysisCameraName] = useState<string | null>(null);
+  const [showRtspSettings, setShowRtspSettings] = useState(false);
 
   // Load configuration and set defaults
   useEffect(() => {
@@ -447,6 +448,7 @@ function App() {
           <InputPanel
             onSourceChange={setInputSource}
             onModeChange={setAnalysisMode}
+            onOpenSettings={() => setShowRtspSettings(true)}
             currentSource={inputSource}
             currentMode={analysisMode}
           />
@@ -634,56 +636,6 @@ function App() {
                     </p>
                   </div>
 
-                  {/* PPE Status Cards */}
-                  {(geminiResult.peopleCount !== undefined || 
-                    geminiResult.missingHardhats !== undefined || 
-                    geminiResult.missingVests !== undefined) && (
-                    <div style={{ marginBottom: '2rem' }}>
-                      <h3 style={{ color: '#bb86fc', fontSize: '1.3rem', marginBottom: '1rem' }}>👥 People & PPE Status</h3>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.5rem' }}>
-                        <div style={{ 
-                          padding: '1.5rem', 
-                          background: 'rgba(0,0,0,0.4)', 
-                          borderRadius: '12px',
-                          textAlign: 'center',
-                          border: '2px solid rgba(187,134,252,0.4)',
-                          boxShadow: '0 4px 12px rgba(187,134,252,0.2)'
-                        }}>
-                          <div style={{ fontSize: '3rem', fontWeight: 'bold', color: '#bb86fc', marginBottom: '0.5rem' }}>
-                            {geminiResult.peopleCount || 0}
-                          </div>
-                          <div style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.9)', fontWeight: 500 }}>Persons Detected</div>
-                        </div>
-                        <div style={{ 
-                          padding: '1.5rem', 
-                          background: 'rgba(0,0,0,0.4)', 
-                          borderRadius: '12px',
-                          textAlign: 'center',
-                          border: '2px solid rgba(244,67,54,0.4)',
-                          boxShadow: '0 4px 12px rgba(244,67,54,0.2)'
-                        }}>
-                          <div style={{ fontSize: '3rem', fontWeight: 'bold', color: '#f44336', marginBottom: '0.5rem' }}>
-                            {geminiResult.missingHardhats || 0}
-                          </div>
-                          <div style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.9)', fontWeight: 500 }}>Missing Hardhats</div>
-                        </div>
-                        <div style={{ 
-                          padding: '1.5rem', 
-                          background: 'rgba(0,0,0,0.4)', 
-                          borderRadius: '12px',
-                          textAlign: 'center',
-                          border: '2px solid rgba(244,67,54,0.4)',
-                          boxShadow: '0 4px 12px rgba(244,67,54,0.2)'
-                        }}>
-                          <div style={{ fontSize: '3rem', fontWeight: 'bold', color: '#f44336', marginBottom: '0.5rem' }}>
-                            {geminiResult.missingVests || 0}
-                          </div>
-                          <div style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.9)', fontWeight: 500 }}>Missing Safety Vests</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Safety Categories Grid */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
                     {/* Construction Safety */}
@@ -781,6 +733,8 @@ function App() {
                 <div style={{ marginTop: '1.5rem' }}>
                   <MultiCameraGrid
                     analysisMode={analysisMode}
+                    showSettings={showRtspSettings}
+                    onCloseSettings={() => setShowRtspSettings(false)}
                     onGeminiResult={(cameraId: string, cameraName: string, result: GeminiAnalysisResult | null) => {
                       console.log(`[App] Gemini result from camera: ${cameraName} (${cameraId})`, result);
                       setGeminiResult(result);
@@ -875,26 +829,6 @@ function App() {
               </div>
               <p>{geminiResult.overallDescription}</p>
               
-              {(geminiResult.peopleCount !== undefined || geminiResult.missingHardhats !== undefined || geminiResult.missingVests !== undefined) && (
-                <div className="ppe-counts">
-                  <h4>👥 People & PPE Status</h4>
-                  <div className="stats-panel">
-                    <div className="stat-card">
-                      <h4>Persons Detected</h4>
-                      <p className="stat-value">{geminiResult.peopleCount || 0}</p>
-                    </div>
-                    <div className="stat-card">
-                      <h4>Missing Hardhats</h4>
-                      <p className="stat-value danger">{geminiResult.missingHardhats || 0}</p>
-                    </div>
-                    <div className="stat-card">
-                      <h4>Missing Safety Vests</h4>
-                      <p className="stat-value danger">{geminiResult.missingVests || 0}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
               <div className="safety-categories">
                 <div className="category">
                   <h4>🏗️ Construction Safety</h4>
@@ -952,25 +886,6 @@ function App() {
               </div>
               <p>Alert Count: {alertResult.alertCount}</p>
               
-              {(alertResult.peopleCount !== undefined || alertResult.missingHardhats !== undefined || alertResult.missingVests !== undefined) && (
-                <div className="ppe-counts">
-                  <h4>👥 People & PPE Status</h4>
-                  <div className="stats-panel">
-                    <div className="stat-card">
-                      <h4>Persons Detected</h4>
-                      <p className="stat-value">{alertResult.peopleCount || 0}</p>
-                    </div>
-                    <div className="stat-card">
-                      <h4>Missing Hardhats</h4>
-                      <p className="stat-value danger">{alertResult.missingHardhats || 0}</p>
-                    </div>
-                    <div className="stat-card">
-                      <h4>Missing Safety Vests</h4>
-                      <p className="stat-value danger">{alertResult.missingVests || 0}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
               
               {alertResult.alerts.length > 0 && (
                 <div className="alerts-list">

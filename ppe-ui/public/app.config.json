@@ -14,39 +14,39 @@
     "cameras": [
       {
         "id": "camera1",
-        "name": "site_b_08",
-        "url": "rtsp://admin:123456@192.168.10.3:554/Streaming/Channels/1",
+        "name": "1",
+        "url": "rtsp://admin:123456@192.168.10.5:554/Streaming/Channels/1",
+        "enabled": true,
+        "tailscaleUrl": "",
+        "useTailscale": true
+      },
+      {
+        "id": "camera2",
+        "name": "2",
+        "url": "rtsp://admin:123456@192.168.10.6:554/Streaming/Channels/1",
         "enabled": true,
         "tailscaleUrl": "",
         "useTailscale": false
       },
       {
-        "id": "camera2",
-        "name": "site_b_09",
-        "url": "rtsp://192.168.10.146:8554",
-        "enabled": false,
-        "tailscaleUrl": "",
-        "useTailscale": false
-      },
-      {
         "id": "camera3",
-        "name": "site_b_11",
-        "url": "rtsp://192.168.10.161:8554",
-        "enabled": false,
+        "name": "3",
+        "url": "rtsp://admin:123456@192.168.10.2:554/Streaming/Channels/1",
+        "enabled": true,
         "tailscaleUrl": "",
         "useTailscale": false
       },
       {
         "id": "camera4",
-        "name": "site_a_04",
-        "url": "rtsp://192.168.10.126:8554",
-        "enabled": false,
+        "name": "4",
+        "url": "rtsp://admin:123456@192.168.10.3:554/Streaming/Channels/1",
+        "enabled": true,
         "tailscaleUrl": "",
         "useTailscale": false
       }
     ],
     "fpsLimit": 15,
-    "geminiInterval": 60,
+    "geminiInterval": 600,
     "autoStart": true
   },
   "debug": {
@@ -56,7 +56,9 @@
   "centralServer": {
     "enabled": true,
     "url": "https://cctvcmp.vercel.app/api/webhook/edge-report",
-    "apiKey": "axonedge852852"
+    "apiKey": "axonedge852852",
+    "eventImageMinRisk": "medium",
+    "eventImageCooldownSeconds": 300
   },
   "network": {
     "camera_lan": "eth1",

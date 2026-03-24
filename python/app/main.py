@@ -63,9 +63,11 @@ app.add_middleware(CORSHeaderMiddleware)
 app.include_router(alarm_router)
 
 _deepvision_task: Optional[asyncio.Task] = None
+_cmp_keepalive_task: Optional[asyncio.Task] = None
 _deepvision_camera_index: int = 0
 _latest_deepvision_results: dict[str, dict] = {}
 _DEEPVISION_CACHE_FILE = Path(__file__).resolve().parent.parent / "deepvision_cache.json"
+_CMP_KEEPALIVE_INTERVAL_SEC = 120
 
 
 def _load_deepvision_cache() -> dict[str, dict]:
@@ -223,6 +225,39 @@ def _build_alarm_payload(camera_id: str, camera_name: str, result: dict) -> dict
     }
 
 
+def _build_keepalive_payload(camera_id: str, camera_name: str) -> dict:
+    cached = _latest_deepvision_results.get(camera_id, {})
+    analysis = cached.get("analysis", {}) if isinstance(cached, dict) else {}
+    return {
+        "camera_id": camera_id,
+        "camera_name": camera_name,
+        "overallDescription": analysis.get("overallDescription")
+        or f"Heartbeat: {camera_name} is live and reachable. No new Deep Vision update in this cycle.",
+        "overallRiskLevel": analysis.get("overallRiskLevel", "Low"),
+        "peopleCount": analysis.get("peopleCount"),
+        "missingHardhats": analysis.get("missingHardhats"),
+        "missingVests": analysis.get("missingVests"),
+        "constructionSafety": analysis.get("constructionSafety")
+        or {
+            "summary": "Camera heartbeat received. Stream is live and reachable.",
+            "issues": [],
+            "recommendations": [],
+        },
+        "fireSafety": analysis.get("fireSafety")
+        or {
+            "summary": "No new Deep Vision fire update in this cycle.",
+            "issues": [],
+            "recommendations": [],
+        },
+        "propertySecurity": analysis.get("propertySecurity")
+        or {
+            "summary": "No new Deep Vision security update in this cycle.",
+            "issues": [],
+            "recommendations": [],
+        },
+    }
+
+
 async def _deepvision_background_loop():
     global _deepvision_camera_index, _latest_deepvision_results
     _latest_deepvision_results = _load_deepvision_cache()
@@ -277,7 +312,13 @@ async def _deepvision_background_loop():
                 }
                 _save_deepvision_cache()
                 observer = get_alarm_observer()
-                await asyncio.to_thread(observer.process_analysis_result, payload, camera_id, camera_name)
+                await asyncio.to_thread(
+                    observer.process_analysis_result,
+                    payload,
+                    camera_id,
+                    camera_name,
+                    frame_jpeg,
+                )
 
             await asyncio.sleep(interval)
         except asyncio.CancelledError:
@@ -286,6 +327,48 @@ async def _deepvision_background_loop():
         except Exception as exc:
             logger.error(f"Deep Vision background loop error: {exc}", exc_info=True)
             await asyncio.sleep(2)
+
+
+async def _cmp_keepalive_loop():
+    logger.info("CMP keepalive loop started")
+    while True:
+        try:
+            cfg = _load_runtime_config()
+            rtsp_cfg = cfg.get("rtsp", {}) if isinstance(cfg, dict) else {}
+            cameras = rtsp_cfg.get("cameras", [])
+            enabled_cameras = [c for c in cameras if isinstance(c, dict) and c.get("enabled") and c.get("url")]
+
+            if not enabled_cameras:
+                await asyncio.sleep(_CMP_KEEPALIVE_INTERVAL_SEC)
+                continue
+
+            observer = get_alarm_observer()
+            for camera in enabled_cameras:
+                camera_id = camera.get("id") or "camera"
+                camera_name = camera.get("name", camera_id)
+                rtsp_url = camera.get("url", "")
+
+                frame_jpeg = await asyncio.to_thread(_capture_jpeg_from_rtsp, rtsp_url)
+                if not frame_jpeg:
+                    logger.debug(f"Skipping CMP keepalive for {camera_id}: camera not reachable")
+                    continue
+
+                keepalive_payload = _build_keepalive_payload(camera_id, camera_name)
+                await asyncio.to_thread(
+                    observer.send_central_server_keepalive,
+                    camera_id,
+                    camera_name,
+                    keepalive_payload,
+                    _CMP_KEEPALIVE_INTERVAL_SEC,
+                )
+
+            await asyncio.sleep(_CMP_KEEPALIVE_INTERVAL_SEC)
+        except asyncio.CancelledError:
+            logger.info("CMP keepalive loop stopped")
+            raise
+        except Exception as exc:
+            logger.error(f"CMP keepalive loop error: {exc}", exc_info=True)
+            await asyncio.sleep(5)
 
 # Load model at startup
 @app.on_event("startup")
@@ -307,9 +390,11 @@ async def startup_event():
         observer = get_alarm_observer(central_server_config=central_server_cfg)
         observer.start_monitoring()
         logger.info("Alarm observer started successfully")
-        global _deepvision_task
+        global _deepvision_task, _cmp_keepalive_task
         if _deepvision_task is None or _deepvision_task.done():
             _deepvision_task = asyncio.create_task(_deepvision_background_loop())
+        if _cmp_keepalive_task is None or _cmp_keepalive_task.done():
+            _cmp_keepalive_task = asyncio.create_task(_cmp_keepalive_loop())
         # Ensure edge-cloud is running regardless of VPN state
         _ensure_edge_cloud_running()
     except Exception as exc:
@@ -319,11 +404,17 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    global _deepvision_task
+    global _deepvision_task, _cmp_keepalive_task
     if _deepvision_task and not _deepvision_task.done():
         _deepvision_task.cancel()
         try:
             await _deepvision_task
+        except asyncio.CancelledError:
+            pass
+    if _cmp_keepalive_task and not _cmp_keepalive_task.done():
+        _cmp_keepalive_task.cancel()
+        try:
+            await _cmp_keepalive_task
         except asyncio.CancelledError:
             pass
 
@@ -1160,7 +1251,12 @@ async def update_app_config(request: Request):
                 config["rtsp"]["autoStart"] = rtsp["autoStart"]
 
         if "centralServer" in body:
-            config["centralServer"] = body["centralServer"]
+            if not isinstance(config.get("centralServer"), dict):
+                config["centralServer"] = {}
+            if isinstance(body["centralServer"], dict):
+                config["centralServer"].update(body["centralServer"])
+            else:
+                config["centralServer"] = body["centralServer"]
         if "vpn" in body:
             vpn_in = body.get("vpn") or {}
             config["vpn"] = {"enabled": bool(vpn_in.get("enabled", True))}

@@ -5,6 +5,7 @@ import { YOLO_API_URL } from '../config/api';
 interface InputPanelProps {
   onSourceChange: (source: InputSource) => void;
   onModeChange: (mode: AnalysisMode) => void;
+  onOpenSettings?: () => void;
   currentSource: InputSource;
   currentMode: AnalysisMode;
 }
@@ -27,6 +28,7 @@ interface AppConfig {
 const InputPanel: React.FC<InputPanelProps> = ({
   onSourceChange,
   onModeChange,
+  onOpenSettings,
   currentSource,
   currentMode,
 }) => {
@@ -115,6 +117,17 @@ const InputPanel: React.FC<InputPanelProps> = ({
               onClick={() => onModeChange('gemini')}
             >
               🤖 Deep Vision
+            </button>
+          </div>
+        </>
+      )}
+
+      {onOpenSettings && (
+        <>
+          <h3>Settings</h3>
+          <div className="button-group">
+            <button onClick={onOpenSettings}>
+              ⚙️ Settings
             </button>
           </div>
         </>

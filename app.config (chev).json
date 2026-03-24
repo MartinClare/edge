@@ -33,7 +33,7 @@
       {
         "id": "camera4",
         "name": "Camera 4",
-        "url": ""rtsp://161.81.239.149:8554/site_b_05",
+        "url": "rtsp://161.81.239.149:8554/site_b_05",
         "enabled": true
       }
     ],

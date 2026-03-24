@@ -41,6 +41,8 @@ interface AppConfig {
 
 interface MultiCameraGridProps {
   analysisMode: AnalysisMode;
+  showSettings: boolean;
+  onCloseSettings: () => void;
   onGeminiResult?: (cameraId: string, cameraName: string, result: GeminiAnalysisResult | null) => void;
   onAlertResult?: (cameraId: string, cameraName: string, result: AlertAnalysisResult | null) => void;
 }
@@ -54,6 +56,8 @@ interface BackendDeepVisionResult {
 
 const MultiCameraGrid: React.FC<MultiCameraGridProps> = ({
   analysisMode,
+  showSettings,
+  onCloseSettings,
   onGeminiResult,
   onAlertResult
 }) => {
@@ -67,8 +71,6 @@ const MultiCameraGrid: React.FC<MultiCameraGridProps> = ({
   const [fpsLimit, setFpsLimit] = useState<number>(15);
   const [geminiInterval, setGeminiInterval] = useState<number>(5);
   const [autoStart, setAutoStart] = useState<boolean>(false);
-  const [showSettings, setShowSettings] = useState(false);
-
   // Global Deep Vision rotation: which camera is allowed to analyze next
   const [currentAnalysisCameraId, setCurrentAnalysisCameraId] = useState<string | null>(null);
   const [lastAnalysisTime, setLastAnalysisTime] = useState<number>(0);
@@ -317,7 +319,6 @@ const MultiCameraGrid: React.FC<MultiCameraGridProps> = ({
       willShowResults: (analysisMode === 'gemini' || analysisMode === 'alerts') && (geminiResult || alertResult),
       geminiResultData: geminiResult ? {
         risk: geminiResult.overallRiskLevel,
-        people: geminiResult.peopleCount,
         description: geminiResult.overallDescription?.substring(0, 50)
       } : null
     });
@@ -461,70 +462,6 @@ const MultiCameraGrid: React.FC<MultiCameraGridProps> = ({
                     </div>
                     <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.25rem' }}>
                       {geminiResult.overallDescription}
-                    </div>
-                  </div>
-                </div>
-
-                {/* People & PPE Status */}
-                <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ 
-                    fontWeight: 600, 
-                    fontSize: '0.85rem', 
-                    marginBottom: '0.5rem',
-                    color: '#e1bee7'
-                  }}>
-                    👥 People & PPE Status
-                  </div>
-                  <div style={{ 
-                    display: 'grid', 
-                    gridTemplateColumns: 'repeat(3, 1fr)', 
-                    gap: '0.5rem'
-                  }}>
-                    <div style={{ 
-                      padding: '0.75rem', 
-                      background: 'rgba(0, 217, 255, 0.1)',
-                      border: '1px solid rgba(0, 217, 255, 0.3)',
-                      borderRadius: '6px',
-                      textAlign: 'center'
-                    }}>
-                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#00d9ff', marginBottom: '0.25rem' }}>
-                        {geminiResult.peopleCount || 0}
-                      </div>
-                      <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' }}>Persons Detected</div>
-                    </div>
-                    <div style={{ 
-                      padding: '0.75rem', 
-                      background: (geminiResult.missingHardhats ?? 0) > 0 ? 'rgba(233, 69, 96, 0.1)' : 'rgba(76, 175, 80, 0.1)',
-                      border: `1px solid ${(geminiResult.missingHardhats ?? 0) > 0 ? 'rgba(233, 69, 96, 0.3)' : 'rgba(76, 175, 80, 0.3)'}`,
-                      borderRadius: '6px',
-                      textAlign: 'center'
-                    }}>
-                      <div style={{ 
-                        fontSize: '1.5rem', 
-                        fontWeight: 'bold', 
-                        color: (geminiResult.missingHardhats ?? 0) > 0 ? '#e94560' : '#4caf50',
-                        marginBottom: '0.25rem'
-                      }}>
-                        {geminiResult.missingHardhats ?? 0}
-                      </div>
-                      <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' }}>Missing Hardhats</div>
-                    </div>
-                    <div style={{ 
-                      padding: '0.75rem', 
-                      background: (geminiResult.missingVests ?? 0) > 0 ? 'rgba(233, 69, 96, 0.1)' : 'rgba(76, 175, 80, 0.1)',
-                      border: `1px solid ${(geminiResult.missingVests ?? 0) > 0 ? 'rgba(233, 69, 96, 0.3)' : 'rgba(76, 175, 80, 0.3)'}`,
-                      borderRadius: '6px',
-                      textAlign: 'center'
-                    }}>
-                      <div style={{ 
-                        fontSize: '1.5rem', 
-                        fontWeight: 'bold', 
-                        color: (geminiResult.missingVests ?? 0) > 0 ? '#e94560' : '#4caf50',
-                        marginBottom: '0.25rem'
-                      }}>
-                        {geminiResult.missingVests ?? 0}
-                      </div>
-                      <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' }}>Missing Safety Vests</div>
                     </div>
                   </div>
                 </div>
@@ -796,26 +733,6 @@ const MultiCameraGrid: React.FC<MultiCameraGridProps> = ({
               </span>
             </div>
 
-            {/* Settings button */}
-            <button
-              onClick={() => setShowSettings(true)}
-              style={{
-                padding: '0.5rem 1rem',
-                borderRadius: '6px',
-                border: '1px solid #00d9ff',
-                background: 'rgba(0, 217, 255, 0.1)',
-                color: '#00d9ff',
-                cursor: 'pointer',
-                fontSize: '0.9rem',
-                fontWeight: 500,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              ⚙️ Settings
-            </button>
           </div>
 
           {/* Multi-camera view: vertical stack with each camera in a row */}
@@ -899,7 +816,7 @@ const MultiCameraGrid: React.FC<MultiCameraGridProps> = ({
           configVpnEnabled={config.vpn?.enabled ?? true}
           configTailscaleEnabled={config.tailscale?.enabled ?? true}
           configTailscaleMode={config.tailscale?.mode ?? 'inbound'}
-          onClose={() => setShowSettings(false)}
+          onClose={onCloseSettings}
           onSave={handleSettingsSave}
         />
       )}

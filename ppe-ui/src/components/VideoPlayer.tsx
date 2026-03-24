@@ -644,21 +644,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         />
         <canvas ref={canvasRef} className="video-overlay-canvas" />
         
-        {/* Analysis Results Overlay at bottom */}
+        {/* Analysis Results Overlay at bottom — text-only (no PPE counts) */}
         <div className="video-analysis-overlay">
           <div className="overlay-stats">
-            <div className="overlay-stat-item">
-              <span className="overlay-stat-label">Persons:</span>
-              <span className="overlay-stat-value">{personCount}</span>
-            </div>
-            <div className="overlay-stat-item">
-              <span className="overlay-stat-label">Missing Hardhats:</span>
-              <span className="overlay-stat-value danger">{missingHardhats}</span>
-            </div>
-            <div className="overlay-stat-item">
-              <span className="overlay-stat-label">Missing Vests:</span>
-              <span className="overlay-stat-value danger">{missingVests}</span>
-            </div>
             <div className="overlay-stat-item">
               <span className="overlay-stat-label">Time:</span>
               <span className="overlay-stat-value">{formatTime(currentTime)}</span>

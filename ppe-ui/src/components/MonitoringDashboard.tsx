@@ -148,19 +148,8 @@ const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
       </div>
 
       {stats && (
-        <div className="stats-panel">
-          <div className="stat-card">
-            <h4>Persons Detected</h4>
-            <p className="stat-value">{stats.personCount}</p>
-          </div>
-          <div className="stat-card">
-            <h4>Missing Hardhats</h4>
-            <p className="stat-value danger">{stats.missingHardhats !== undefined ? stats.missingHardhats : (stats.personCount > 0 && stats.hardhatCount !== undefined ? Math.max(0, stats.personCount - stats.hardhatCount) : 0)}</p>
-          </div>
-          <div className="stat-card">
-            <h4>Missing Safety Vests</h4>
-            <p className="stat-value danger">{stats.missingVests !== undefined ? stats.missingVests : (stats.personCount > 0 && stats.vestCount !== undefined ? Math.max(0, stats.personCount - stats.vestCount) : 0)}</p>
-          </div>
+        <div className="stats-panel" style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.85)' }}>
+          Observations are described in the AI analysis (Construction Safety / Fire / Security) below — no numeric PPE counts.
         </div>
       )}
     </div>

@@ -88,6 +88,9 @@ class AlarmObserver:
         self.active_alarms: Dict[str, AlarmEvent] = {}
         self.detection_buffer: Dict[str, List[Dict]] = {}  # Camera ID -> detection history
         self.last_alarm_time: Dict[str, datetime] = {}  # Camera ID -> last alarm time
+        self.last_central_server_send: Dict[str, datetime] = {}  # Camera ID -> last CMP send time
+        self.last_central_server_image_event: Dict[str, datetime] = {}  # Camera ID -> last image event send
+        self._central_server_lock = threading.Lock()
         self._monitor_thread: Optional[threading.Thread] = None
         self._running = False
         
@@ -501,11 +504,83 @@ class AlarmObserver:
         except Exception as e:
             logger.error(f"Error sending webhook notification: {e}")
     
-    def _send_to_central_server(self, camera_id: str, camera_name: str, analysis_result: Dict) -> None:
-        """Send every analysis result to the central monitoring platform webhook (runs in background)."""
+    def _mark_central_server_send(self, camera_id: str) -> None:
+        with self._central_server_lock:
+            self.last_central_server_send[camera_id] = datetime.utcnow()
+
+    def _should_attach_event_image(self, camera_id: str, analysis_result: Dict, event_image: Optional[bytes]) -> bool:
+        if not event_image:
+            return False
+
+        risk = str(analysis_result.get("overallRiskLevel", "Low")).strip().lower()
+        rank = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+        min_risk = str(self.central_server_config.get("eventImageMinRisk", "medium")).strip().lower()
+        if rank.get(risk, 0) < rank.get(min_risk, 1):
+            return False
+
+        cooldown_seconds = int(self.central_server_config.get("eventImageCooldownSeconds", 300) or 300)
+        now = datetime.utcnow()
+        with self._central_server_lock:
+            last_sent = self.last_central_server_image_event.get(camera_id)
+            if last_sent and (now - last_sent).total_seconds() < cooldown_seconds:
+                return False
+            self.last_central_server_image_event[camera_id] = now
+        return True
+
+    def send_central_server_keepalive(
+        self,
+        camera_id: str,
+        camera_name: str,
+        analysis_result: Optional[Dict] = None,
+        min_interval_seconds: int = 120,
+    ) -> bool:
+        """Send a periodic keepalive for live cameras so CMP knows the edge is still active."""
+        cfg = self.central_server_config
+        if not cfg.get("enabled") or not cfg.get("url") or not cfg.get("apiKey"):
+            return False
+
+        now = datetime.utcnow()
+        with self._central_server_lock:
+            last_sent = self.last_central_server_send.get(camera_id)
+            if last_sent and (now - last_sent).total_seconds() < min_interval_seconds:
+                return False
+            self.last_central_server_send[camera_id] = now
+
+        payload = analysis_result or {
+            "overallDescription": f"Heartbeat: {camera_name or camera_id} is live and reachable. No new Deep Vision update in this cycle.",
+            "overallRiskLevel": "Low",
+            "constructionSafety": {
+                "summary": "Camera heartbeat received. Stream is live and reachable.",
+                "issues": [],
+                "recommendations": [],
+            },
+            "fireSafety": {
+                "summary": "No new Deep Vision fire update in this cycle.",
+                "issues": [],
+                "recommendations": [],
+            },
+            "propertySecurity": {
+                "summary": "No new Deep Vision security update in this cycle.",
+                "issues": [],
+                "recommendations": [],
+            },
+        }
+        self._send_to_central_server(camera_id, camera_name, payload, message_type="keepalive")
+        return True
+
+    def _send_to_central_server(
+        self,
+        camera_id: str,
+        camera_name: str,
+        analysis_result: Dict,
+        message_type: str = "analysis",
+        event_image: Optional[bytes] = None,
+    ) -> None:
+        """Send analysis or keepalive updates to the central monitoring platform webhook."""
         cfg = self.central_server_config
         if not cfg.get("enabled") or not cfg.get("url") or not cfg.get("apiKey"):
             return
+        self._mark_central_server_send(camera_id)
         url = cfg.get("url", "").rstrip("/")
         api_key = cfg.get("apiKey", "")
         retry_attempts = int(cfg.get("retryAttempts", 3))
@@ -515,6 +590,9 @@ class AlarmObserver:
             "edgeCameraId": camera_id,
             "cameraName": camera_name or camera_id,
             "timestamp": datetime.utcnow().isoformat() + "Z",
+            "messageType": message_type,
+            "keepalive": message_type == "keepalive",
+            "eventImageIncluded": False,
             "analysis": {
                 "overallDescription": analysis_result.get("overallDescription", ""),
                 "overallRiskLevel": analysis_result.get("overallRiskLevel", "Low"),
@@ -562,26 +640,50 @@ class AlarmObserver:
         def _do_send() -> None:
             jwt_secret = _load_jwt_secret()
             auth_token = _generate_jwt(jwt_secret) if jwt_secret else ""
+            attach_event_image = message_type == "analysis" and self._should_attach_event_image(camera_id, analysis_result, event_image)
+            if attach_event_image:
+                payload["eventImageIncluded"] = True
+
             for attempt in range(retry_attempts):
                 try:
-                    headers = {"X-API-Key": api_key, "Content-Type": "application/json"}
+                    headers = {"X-API-Key": api_key}
                     if auth_token:
                         headers["Authorization"] = f"Bearer {auth_token}"
-                    resp = requests.post(
-                        url,
-                        json=payload,
-                        headers=headers,
-                        timeout=30,
-                    )
+
+                    if attach_event_image:
+                        data = {"payload": json.dumps(payload, separators=(",", ":"), ensure_ascii=False)}
+                        files = {
+                            "image": (
+                                f"{camera_id}-{int(time.time())}.jpg",
+                                event_image,
+                                "image/jpeg",
+                            )
+                        }
+                        resp = requests.post(
+                            url,
+                            data=data,
+                            files=files,
+                            headers=headers,
+                            timeout=30,
+                        )
+                    else:
+                        headers["Content-Type"] = "application/json"
+                        resp = requests.post(
+                            url,
+                            json=payload,
+                            headers=headers,
+                            timeout=30,
+                        )
+
                     if resp.ok:
-                        logger.info(f"Central server report sent for {camera_id}")
+                        logger.info(f"Central server {message_type} sent for {camera_id}")
                         return
-                    logger.warning(f"Central server returned {resp.status_code} (attempt {attempt + 1}/{retry_attempts})")
+                    logger.warning(f"Central server returned {resp.status_code} for {message_type} (attempt {attempt + 1}/{retry_attempts})")
                 except Exception as e:
-                    logger.warning(f"Central server attempt {attempt + 1}/{retry_attempts} failed: {e}")
+                    logger.warning(f"Central server {message_type} attempt {attempt + 1}/{retry_attempts} failed: {e}")
                 if attempt < retry_attempts - 1:
                     time.sleep(retry_delay)
-            logger.error(f"Failed to send to central server after {retry_attempts} attempts")
+            logger.error(f"Failed to send {message_type} to central server after {retry_attempts} attempts")
 
         thread = threading.Thread(target=_do_send, daemon=True)
         thread.start()
@@ -680,7 +782,13 @@ class AlarmObserver:
             return True
         return False
     
-    def process_analysis_result(self, analysis_result: Dict, camera_id: str, camera_name: Optional[str] = None) -> Optional[AlarmEvent]:
+    def process_analysis_result(
+        self,
+        analysis_result: Dict,
+        camera_id: str,
+        camera_name: Optional[str] = None,
+        event_image: Optional[bytes] = None,
+    ) -> Optional[AlarmEvent]:
         """
         Process a Deep Vision analysis result and trigger alarm if necessary.
         
@@ -694,7 +802,13 @@ class AlarmObserver:
         Returns:
             AlarmEvent if alarm was triggered, None otherwise
         """
-        self._send_to_central_server(camera_id, camera_name or camera_id, analysis_result)
+        self._send_to_central_server(
+            camera_id,
+            camera_name or camera_id,
+            analysis_result,
+            message_type="analysis",
+            event_image=event_image,
+        )
 
         if not self.config.get('alarmSystem', {}).get('enabled', False):
             return None

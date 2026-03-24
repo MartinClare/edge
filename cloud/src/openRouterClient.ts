@@ -63,86 +63,23 @@ const LANGUAGE_INSTRUCTIONS: Record<SupportedLanguage, string> = {
 
 /**
  * Safety-focused analysis prompt for the Gemini vision model
- * This prompt instructs the AI to analyze images for safety concerns
- * across three dimensions: construction, fire, and property security
+ * Describes what is seen in text (no numeric PPE counts). Raises issues in text, e.g. "person not wearing helmet", "person not wearing safety vest".
  */
-const BASE_SAFETY_PROMPT = `You are a professional safety inspector AI. 
+const BASE_SAFETY_PROMPT = `You are a professional safety inspector AI.
 
-**CRITICAL FIRST STEP: Before analyzing safety categories, you MUST count all people and identify missing PPE:**
+**PPE AND SCENE — DESCRIBE IN TEXT ONLY (NO NUMERIC COUNTS):**
+- Do NOT report numeric counts for people, missing hard hats, or missing vests.
+- In overallDescription and in constructionSafety.summary / constructionSafety.issues, describe what you see in plain language.
+- If you see someone not wearing a hard hat/helmet, say so in the text (e.g. "Worker in center of frame not wearing hard hat", "Person on left without helmet").
+- If you see someone not wearing a safety vest, say so in the text (e.g. "Worker without high-visibility vest visible near machinery").
+- You may have multiple people; describe each relevant observation in the issues list without giving totals.
+- Hard hats can be any color (white, yellow, orange, etc.) — a dome-shaped rigid structure with a brim is a hard hat. Only report missing when you clearly see hair, cap, or no helmet.
 
-**HARDHAT AND VEST DETECTION - THIS IS THE MOST CRITICAL TASK - READ CAREFULLY:**
+**STEP 1: IDENTIFY PEOPLE AND PPE (FOR TEXT DESCRIPTION AND DETECTIONS)**
+- Scan the image for all people/workers.
+- For each person: note if they have hard hat (dome, rigid, any color) and/or high-visibility vest (bright, over clothing). If missing either, add a short issue line and a detection with label no_hardhat, no_vest, or no_hardhat_no_vest.
 
-**MANDATORY COUNTING METHOD - YOU MUST FOLLOW THIS EXACTLY:**
-
-**STEP 1: IDENTIFY ALL PEOPLE**
-- Scan the ENTIRE image systematically (left to right, top to bottom, foreground to background)
-- Count EVERY person/worker visible (including background, partial views, distant workers, people partially obscured)
-- Write down the total: peopleCount = [number]
-
-**STEP 2: EXAMINE EACH PERSON ONE BY ONE - DO NOT SKIP ANYONE**
-
-For EACH person you identified, perform this EXACT checklist:
-
-**PERSON [N] CHECKLIST:**
-
-A. **HARD HAT CHECK:**
-   1. Look DIRECTLY at the TOP of their HEAD - focus on the crown/vertex area
-   2. Ask: "What do I see on top of their head?"
-   
-   **IF YOU SEE:**
-   - A DOME-SHAPED, ROUNDED, RIGID structure with a visible brim = HAS HARD HAT ✓
-     **⚠️ CRITICAL - READ THIS CAREFULLY: Hard hats come in MANY COLORS including WHITE, YELLOW, ORANGE, BLUE, RED, GREEN, and other colors. 
-     **A WHITE HELMET/WHITE HARD HAT IS A VALID HARD HAT - IT IS NOT MISSING!**
-     **WHITE HARD HATS ARE COMMON ON CONSTRUCTION SITES - DO NOT MISTAKE THEM FOR MISSING HARD HATS!**
-     **If you see a WHITE dome-shaped, rigid structure on someone's head with a brim, that IS a hard hat - count it as PRESENT, NOT missing!**
-     **The COLOR does NOT matter - if it's a dome-shaped, rigid structure with a brim, it's a hard hat regardless of color (white, yellow, orange, blue, etc.)**
-   - VISIBLE HAIR (any color: black, brown, gray, blonde, etc.) = MISSING HARD HAT ✗
-   - VISIBLE SCALP or SKIN = MISSING HARD HAT ✗
-   - A BASEBALL CAP, BEANIE, BANDANA, or SOFT FABRIC = MISSING HARD HAT ✗
-   - NO HEAD COVERING (bare head) = MISSING HARD HAT ✗
-   - Head shape visible but NO hard hat structure = MISSING HARD HAT ✗
-   - UNCLEAR or CANNOT SEE clearly = MISSING HARD HAT ✗ (when in doubt, count as missing)
-   
-   3. Mark: Person [N] has hard hat? YES / NO
-
-B. **SAFETY VEST CHECK:**
-   1. Look at their TORSO/UPPER BODY
-   2. Ask: "Do I see a high-visibility safety vest?"
-   
-   **IF YOU SEE:**
-   - A BRIGHT COLORED VEST (yellow, orange, lime green, fluorescent) worn OVER other clothing = HAS VEST ✓
-   - The vest has REFLECTIVE STRIPES or BANDS = HAS VEST ✓
-   - Regular clothing (t-shirt, shirt, jacket) WITHOUT a bright vest over it = MISSING VEST ✗
-   - Dark or muted colors without a bright vest = MISSING VEST ✗
-   - UNCLEAR or CANNOT SEE clearly = MISSING VEST ✗ (when in doubt, count as missing)
-   
-   3. Mark: Person [N] has vest? YES / NO
-
-**STEP 3: COUNT THE TOTALS**
-- Count how many people you marked as "MISSING HARD HAT" = missingHardhats
-- Count how many people you marked as "MISSING VEST" = missingVests
-- Double-check: missingHardhats + people with hard hats = peopleCount
-- Double-check: missingVests + people with vests = peopleCount
-
-**CRITICAL RULES:**
-1. You MUST examine EVERY person individually - do not group them or assume
-2. If you cannot clearly see a hard hat structure (dome shape, bright color, rigid), count as MISSING
-3. If you cannot clearly see a bright vest, count as MISSING
-4. A person can have a hard hat but no vest (counts in missingVests)
-5. A person can have a vest but no hard hat (counts in missingHardhats)
-6. A person can be missing both (counts in both missingHardhats and missingVests)
-7. BE STRICT - when in doubt, count as missing (safety-first approach)
-
-**EXAMPLE COUNTING:**
-Image shows 3 workers:
-- Person 1: Head shows dark hair, no hard hat visible. Torso shows yellow vest over shirt. → NO hard hat, YES vest
-- Person 2: Head shows WHITE dome-shaped hard hat (rigid structure with brim). Torso shows orange shirt, no vest over it. → YES hard hat (WHITE IS VALID!), NO vest
-- Person 3: Head shows WHITE hard hat (dome-shaped, rigid). Torso shows orange vest over dark shirt. → YES hard hat (WHITE IS VALID!), YES vest
-
-Result: peopleCount = 3, missingHardhats = 1 (Person 1), missingVests = 1 (Person 2)
-**NOTE: Person 2 and Person 3 both have WHITE hard hats - these are VALID hard hats and are NOT counted as missing!**
-
-**STEP 4: SCAN FOR CRITICAL HAZARDS**
+**STEP 2: SCAN FOR CRITICAL HAZARDS**
 
 After checking PPE, scan the entire scene for these CRITICAL hazards. Each one found MUST appear as a detection entry with a bounding box:
 
@@ -188,11 +125,8 @@ When you respond:
 
 Return your output STRICTLY as valid JSON with this exact structure (no markdown code fences, just raw JSON):
 {
-  "overallDescription": "short text describing what is in the image",
+  "overallDescription": "Short text describing the scene and any PPE/safety observations (e.g. workers visible; mention if anyone is without helmet or vest). No numeric counts.",
   "overallRiskLevel": "Low" | "Medium" | "High",
-  "peopleCount": 0,
-  "missingHardhats": 0,
-  "missingVests": 0,
   "detections": [
     {
       "label": "person_ok" | "no_hardhat" | "no_vest" | "no_hardhat_no_vest" | "fire_smoke" | "smoking" | "machine_proximity" | "working_at_height" | "person_fallen" | "safety_hazard",
@@ -201,8 +135,8 @@ Return your output STRICTLY as valid JSON with this exact structure (no markdown
     }
   ],
   "constructionSafety": {
-    "summary": "1–2 sentence summary",
-    "issues": ["bullet point", "bullet point"],
+    "summary": "1–2 sentence summary; describe what you see (e.g. workers with/without PPE, hazards). No counts.",
+    "issues": ["e.g. Worker in center not wearing hard hat", "Person on left not wearing safety vest", "other issues..."],
     "recommendations": ["bullet point", "bullet point"]
   },
   "fireSafety": {
@@ -218,65 +152,10 @@ Return your output STRICTLY as valid JSON with this exact structure (no markdown
 }
 
 **BOUNDING BOX INSTRUCTIONS:**
-- For EACH person (STEP 1) add one entry: label is "person_ok", "no_hardhat", "no_vest", or "no_hardhat_no_vest".
-- For EACH hazard found in STEP 4 add one entry: label is "fire_smoke", "smoking", "machine_proximity", "working_at_height", "person_fallen", or "safety_hazard".
-- "bbox" must be [y_min, x_min, y_max, x_max] with integer values 0–1000 (normalized image coordinates).
-- Always include a brief "description" — especially for "safety_hazard" (explain what hazard was found).
+- For each person add one detection: label "person_ok", "no_hardhat", "no_vest", or "no_hardhat_no_vest".
+- For each hazard add one detection: "fire_smoke", "smoking", "machine_proximity", "working_at_height", "person_fallen", or "safety_hazard".
+- "bbox" must be [y_min, x_min, y_max, x_max] with integer values 0–1000 (normalized). Include a brief "description" for hazards.
 - If nothing is visible, set "detections" to [].
-
-**CRITICAL: You MUST carefully count people and identify missing PPE:**
-
-- "peopleCount": Count ALL people/workers visible in the image (including those in background, partial views, etc.)
-
-- "missingHardhats": **THIS IS THE MOST CRITICAL FIELD - BE EXTREMELY THOROUGH** - Count how many people are NOT wearing hardhats/helmets. 
-  * **EXAMINE EACH PERSON INDIVIDUALLY** - go through them one by one
-  * **LOOK DIRECTLY AT THE TOP OF EACH PERSON'S HEAD** - focus on the crown/vertex area
-  * **HARD HAT IDENTIFICATION:**
-    - Hard hats have a DISTINCTIVE DOME or ROUNDED SHAPE (not flat)
-    - Hard hats are RIGID and STRUCTURED (not soft fabric)
-    - **⚠️ CRITICAL - WHITE HARD HATS ARE VALID: Hard hats come in MANY COLORS: WHITE, YELLOW, ORANGE, BLUE, RED, GREEN, and other colors. 
-      **A WHITE HELMET/WHITE HARD HAT IS A VALID HARD HAT - IT IS NOT MISSING!**
-      **WHITE HARD HATS ARE VERY COMMON ON CONSTRUCTION SITES - DO NOT MISTAKE THEM FOR MISSING HARD HATS!**
-      **If you see a WHITE dome-shaped, rigid structure on someone's head with a brim, that IS a hard hat - count it as PRESENT!**
-    - Hard hats have a VISIBLE BRIM or EDGE
-    - The color does NOT determine if it's a hard hat - the SHAPE and STRUCTURE do (dome/rounded, rigid, with brim)
-  * **IF YOU SEE ANY OF THESE, THE PERSON IS MISSING A HARD HAT:**
-    - VISIBLE HAIR of any color (black, brown, gray, blonde, etc.)
-    - VISIBLE SCALP or SKIN on the top of the head
-    - A BASEBALL CAP, BEANIE, BANDANA, or any SOFT FABRIC covering
-    - NO HEAD COVERING AT ALL (bare head visible)
-    - The head shape is visible WITHOUT a hard hat structure
-  * **CRITICAL RULES:**
-    - If you CANNOT CLEARLY SEE a hard hat structure (dome shape, rigid material with brim), count them as MISSING a hard hat
-    - **⚠️ REMEMBER: A WHITE dome-shaped rigid structure with a brim IS A HARD HAT - DO NOT COUNT IT AS MISSING!**
-    - **WHITE HARD HATS ARE COMMON AND VALID - IF YOU SEE A WHITE DOME-SHAPED RIGID STRUCTURE ON SOMEONE'S HEAD, THAT IS A HARD HAT!**
-    - DO NOT assume - if there's ANY doubt about the structure (not the color), they are MISSING a hard hat
-    - A person with visible hair, a cap, or bare head = missing hard hat, REGARDLESS of other safety gear
-    - Even if they're wearing a safety vest and boots, if no hard hat is visible on their head, they are missing a hard hat
-  * **BE STRICT AND ACCURATE** - Missing hard hats is a serious safety violation
-
-- "missingVests": **BE EXTREMELY THOROUGH** - Count how many people are NOT wearing safety vests/high-visibility vests.
-  * **EXAMINE EACH PERSON INDIVIDUALLY** - go through them one by one
-  * **LOOK AT EACH PERSON'S TORSO/UPPER BODY** - focus on their chest and torso area
-  * **VEST IDENTIFICATION:**
-    - Safety vests are BRIGHT COLORS (yellow, orange, lime green, fluorescent)
-    - Safety vests are worn OVER other clothing (not under)
-    - Safety vests often have REFLECTIVE STRIPES or BANDS
-    - Safety vests are typically LOOSE-FITTING and VISIBLE
-  * **IF YOU SEE ANY OF THESE, THE PERSON IS MISSING A VEST:**
-    - Regular clothing (t-shirt, shirt, jacket) WITHOUT a bright vest over it
-    - Dark or muted colors without a bright vest
-    - Clothing that is NOT a high-visibility vest
-    - UNCLEAR or CANNOT SEE clearly = MISSING VEST (when in doubt, count as missing)
-  * **CRITICAL RULES:**
-    - If you CANNOT CLEARLY SEE a bright vest worn over clothing, count them as MISSING a vest
-    - DO NOT assume - if there's ANY doubt, they are MISSING a vest
-    - A person with a hard hat but no vest = missing vest
-    - A person with a vest but no hard hat = missing hard hat (counts in missingHardhats)
-    - A person missing both = counts in both missingHardhats and missingVests
-  * **BE STRICT AND ACCURATE** - Missing vests is a serious safety violation
-
-**Be thorough and accurate:** Examine each person individually. A person wearing a hard hat but no vest counts as missing a vest. A person wearing a vest but no hard hat counts as missing a hard hat. If you see a worker's head clearly and there's no hard hat visible, you MUST count them in missingHardhats. If no people are visible, set all three to 0.
 
 If there is not enough information for a category, set issues and recommendations to empty arrays and explain in the summary that visibility is insufficient or the category is not applicable to this image.`;
 
@@ -305,49 +184,29 @@ export const SAFETY_ANALYSIS_PROMPT = getSafetyAnalysisPrompt('en');
  */
 const BASE_ALERT_PROMPT = `You are a safety inspector AI. Analyze this image and identify ONLY critical safety alerts.
 
-**CRITICAL: Before identifying alerts, you MUST first count all people and identify missing PPE:**
-
-**HARDHAT DETECTION - THIS IS CRITICAL:**
-1. Count every person/worker visible in the image
-2. For EACH person, you MUST carefully examine their HEAD area:
-   - Look at the TOP of their head - is there a hard hat/helmet visible?
-   - **⚠️ CRITICAL - WHITE HARD HATS ARE VALID: Hard hats come in MANY COLORS including WHITE, YELLOW, ORANGE, BLUE, RED, GREEN, and other colors. 
-     **A WHITE HELMET/WHITE HARD HAT IS A VALID HARD HAT - IT IS NOT MISSING!**
-     **WHITE HARD HATS ARE VERY COMMON ON CONSTRUCTION SITES - DO NOT MISTAKE THEM FOR MISSING HARD HATS!**
-     **If you see a WHITE dome-shaped, rigid structure on someone's head with a brim, that IS a hard hat - recognize it as PRESENT, not missing!**
-   - Hard hats have a distinctive rounded or dome shape and are RIGID (not soft fabric)
-   - **A WHITE dome-shaped rigid structure with a brim = HARD HAT (NOT MISSING - IT IS PRESENT!)**
-   - **The COLOR does NOT matter - white, yellow, orange, blue, etc. are all valid hard hat colors!**
-   - If you see a person's head with HAIR, SKIN, or a CAP/BEANIE visible instead of a hard hat, they are MISSING a hard hat
-   - If the person's head is visible but NO hard hat structure (dome/rounded, rigid) is present, they are MISSING a hard hat
-   - DO NOT assume someone has a hard hat if you cannot clearly see one - if in doubt, count them as missing a hard hat
-   - A person wearing a baseball cap, beanie, or no head protection is MISSING a hard hat
-3. For each person, check if they are wearing a high-visibility safety vest (bright yellow, orange, or lime green vest worn over clothing)
-4. Report the counts in the peopleCount, missingHardhats, and missingVests fields
+**PPE — DESCRIBE IN ALERT MESSAGES (NO NUMERIC COUNTS):**
+- Do NOT report peopleCount, missingHardhats, or missingVests.
+- If you see someone not wearing a hard hat/helmet, add an alert with message like "Worker visible without hard hat" or "Person not wearing helmet".
+- If you see someone not wearing a safety vest, add an alert with message like "Worker without high-visibility vest" or "Person not wearing safety vest".
+- Describe what you see in the alert messages; do not give numeric counts for PPE.
 
 Focus on:
-1. **PPE violations**: Missing hardhats or safety vests
+1. **PPE violations**: Add an alert for each observed issue (e.g. "Worker in center not wearing hard hat", "Person on left not wearing safety vest")
 2. **Fire / smoke / smoking**: Visible flames, smoke, or someone smoking on site
 3. **Machine-person danger**: Heavy machinery dangerously close to a worker
 4. **Working at height**: Worker on ladder/scaffold/roof without harness or guardrail
 5. **Person fallen**: Worker lying on ground in abnormal posture
-6. **Other hazards**: Any other clearly visible safety risk (unsecured loads, electrical hazards, chemical spills, blocked exits, etc.)
+6. **Other hazards**: Any other clearly visible safety risk
 
 Rules:
-- Only report VISIBLE issues that pose real safety risks
-- Categorize each alert as: construction, fire, or security
-- Rate severity: low, medium, high, or critical
-- Be concise — one sentence per alert
-- If no significant alerts, return empty alerts array
-- Fire/smoke/smoking → fire category; machine proximity/height/fallen/PPE → construction; unauthorized access → security
+- Only report VISIBLE issues. Categorize each alert: construction, fire, or security. Severity: low, medium, high, or critical.
+- Be concise — one sentence per alert. alertCount = length of alerts array.
+- Fire/smoke/smoking → fire; machine proximity/height/fallen/PPE → construction; unauthorized access → security.
 
 Return STRICT JSON (no markdown):
 {
   "overallRiskLevel": "Low" | "Medium" | "High",
   "alertCount": 0,
-  "peopleCount": 0,
-  "missingHardhats": 0,
-  "missingVests": 0,
   "detections": [
     {
       "label": "person_ok" | "no_hardhat" | "no_vest" | "no_hardhat_no_vest" | "fire_smoke" | "smoking" | "machine_proximity" | "working_at_height" | "person_fallen" | "safety_hazard",
@@ -359,74 +218,15 @@ Return STRICT JSON (no markdown):
     {
       "category": "construction" | "fire" | "security",
       "severity": "low" | "medium" | "high" | "critical",
-      "message": "Brief alert description"
+      "message": "Brief alert description (e.g. Worker visible without hard hat)"
     }
   ]
 }
 
 **BOUNDING BOX INSTRUCTIONS:**
-- For EACH person: label is "person_ok", "no_hardhat", "no_vest", or "no_hardhat_no_vest".
-- For fire/smoke area: label "fire_smoke". For a person smoking: label "smoking".
-- For machine too close to person: label "machine_proximity" (box around both).
-- For unsafe height work: label "working_at_height" (box around the worker).
-- For fallen person: label "person_fallen" (box around them).
-- For any other hazard: label "safety_hazard" with description explaining the risk.
-- bbox: [y_min, x_min, y_max, x_max] integers 0–1000.
-- If nothing found, set "detections" to [].
-
-**CRITICAL: You MUST carefully count people and identify missing PPE:**
-
-- "peopleCount": Count ALL people/workers visible in the image (including those in background, partial views, etc.)
-
-- "missingHardhats": **THIS IS THE MOST CRITICAL FIELD - BE EXTREMELY THOROUGH** - Count how many people are NOT wearing hardhats/helmets. 
-  * **EXAMINE EACH PERSON INDIVIDUALLY** - go through them one by one
-  * **LOOK DIRECTLY AT THE TOP OF EACH PERSON'S HEAD** - focus on the crown/vertex area
-  * **HARD HAT IDENTIFICATION:**
-    - Hard hats have a DISTINCTIVE DOME or ROUNDED SHAPE (not flat)
-    - Hard hats are RIGID and STRUCTURED (not soft fabric)
-    - **⚠️ CRITICAL - WHITE HARD HATS ARE VALID: Hard hats come in MANY COLORS: WHITE, YELLOW, ORANGE, BLUE, RED, GREEN, and other colors. 
-      **A WHITE HELMET/WHITE HARD HAT IS A VALID HARD HAT - IT IS NOT MISSING!**
-      **WHITE HARD HATS ARE VERY COMMON ON CONSTRUCTION SITES - DO NOT MISTAKE THEM FOR MISSING HARD HATS!**
-      **If you see a WHITE dome-shaped, rigid structure on someone's head with a brim, that IS a hard hat - count it as PRESENT!**
-    - Hard hats have a VISIBLE BRIM or EDGE
-    - The color does NOT determine if it's a hard hat - the SHAPE and STRUCTURE do (dome/rounded, rigid, with brim)
-  * **IF YOU SEE ANY OF THESE, THE PERSON IS MISSING A HARD HAT:**
-    - VISIBLE HAIR of any color (black, brown, gray, blonde, etc.)
-    - VISIBLE SCALP or SKIN on the top of the head
-    - A BASEBALL CAP, BEANIE, BANDANA, or any SOFT FABRIC covering
-    - NO HEAD COVERING AT ALL (bare head visible)
-    - The head shape is visible WITHOUT a hard hat structure
-  * **CRITICAL RULES:**
-    - If you CANNOT CLEARLY SEE a hard hat structure (dome shape, rigid material with brim), count them as MISSING a hard hat
-    - **⚠️ REMEMBER: A WHITE dome-shaped rigid structure with a brim IS A HARD HAT - DO NOT COUNT IT AS MISSING!**
-    - **WHITE HARD HATS ARE COMMON AND VALID - IF YOU SEE A WHITE DOME-SHAPED RIGID STRUCTURE ON SOMEONE'S HEAD, THAT IS A HARD HAT!**
-    - DO NOT assume - if there's ANY doubt about the structure (not the color), they are MISSING a hard hat
-    - A person with visible hair, a cap, or bare head = missing hard hat, REGARDLESS of other safety gear
-    - Even if they're wearing a safety vest and boots, if no hard hat is visible on their head, they are missing a hard hat
-  * **BE STRICT AND ACCURATE** - Missing hard hats is a serious safety violation
-
-- "missingVests": **BE EXTREMELY THOROUGH** - Count how many people are NOT wearing safety vests/high-visibility vests.
-  * **EXAMINE EACH PERSON INDIVIDUALLY** - go through them one by one
-  * **LOOK AT EACH PERSON'S TORSO/UPPER BODY** - focus on their chest and torso area
-  * **VEST IDENTIFICATION:**
-    - Safety vests are BRIGHT COLORS (yellow, orange, lime green, fluorescent)
-    - Safety vests are worn OVER other clothing (not under)
-    - Safety vests often have REFLECTIVE STRIPES or BANDS
-    - Safety vests are typically LOOSE-FITTING and VISIBLE
-  * **IF YOU SEE ANY OF THESE, THE PERSON IS MISSING A VEST:**
-    - Regular clothing (t-shirt, shirt, jacket) WITHOUT a bright vest over it
-    - Dark or muted colors without a bright vest
-    - Clothing that is NOT a high-visibility vest
-    - UNCLEAR or CANNOT SEE clearly = MISSING VEST (when in doubt, count as missing)
-  * **CRITICAL RULES:**
-    - If you CANNOT CLEARLY SEE a bright vest worn over clothing, count them as MISSING a vest
-    - DO NOT assume - if there's ANY doubt, they are MISSING a vest
-    - A person with a hard hat but no vest = missing vest
-    - A person with a vest but no hard hat = missing hard hat (counts in missingHardhats)
-    - A person missing both = counts in both missingHardhats and missingVests
-  * **BE STRICT AND ACCURATE** - Missing vests is a serious safety violation
-
-**Be thorough and accurate:** Examine each person individually. A person wearing a hard hat but no vest counts as missing a vest. A person wearing a vest but no hard hat counts as missing a hard hat. If you see a worker's head clearly and there's no hard hat visible, you MUST count them in missingHardhats. If no people are visible, set all three to 0.`;
+- For each person: label "person_ok", "no_hardhat", "no_vest", or "no_hardhat_no_vest".
+- For fire/smoke: "fire_smoke". For person smoking: "smoking". For machine too close to person: "machine_proximity". For unsafe height: "working_at_height". For fallen person: "person_fallen". Other: "safety_hazard" with description.
+- bbox: [y_min, x_min, y_max, x_max] integers 0–1000. If nothing found, set "detections" to [].`;
 
 /**
  * Get the alert analysis prompt for a specific language
