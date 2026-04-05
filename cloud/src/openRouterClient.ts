@@ -41,10 +41,10 @@ export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions
  *
  * Full list: https://openrouter.ai/models (filter by "Image" input)
  */
-/** Primary: Gemini 2.0 Flash (cheapest). When deprecated Jun 2026, switch to FALLBACK_MODEL. */
-export const MODEL_NAME = 'google/gemini-2.0-flash-001';
-/** Fallback when 2.0 Flash is retired. Change MODEL_NAME to this when 2.0 returns errors. */
-export const FALLBACK_MODEL = 'google/gemini-2.5-flash';
+/** Primary: Qwen3 VL 32B (strong vision-language, 32B params, supports image input). */
+export const MODEL_NAME = 'qwen/qwen3-vl-32b-instruct';
+/** Fallback: Gemini 2.0 Flash (cheaper). Switch if Qwen3 VL 32B is unavailable or too slow. */
+export const FALLBACK_MODEL = 'google/gemini-2.0-flash-001';
 
 /**
  * Supported languages for analysis output
